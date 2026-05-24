@@ -301,7 +301,8 @@
           ]
         }
       ],
-      "channel": "911"
+      "channel": "911",
+      "case_id": "tutorial_mirna_auto_robado"
     },
     {
       "id": "dani_chat",
@@ -376,12 +377,12 @@
           "text": "En la pantalla dos iconos parpadean. CARABINEROS y SEGURIDAD CIUDADANA."
         },
         {
-          "speaker": "",
-          "text": ""
+          "kind": "dispatch"
         }
       ],
       "next": "outro",
-      "channel": "911"
+      "channel": "911",
+      "case_id": "tutorial_mirna_auto_robado"
     },
     {
       "id": "first_alert",
@@ -426,7 +427,8 @@
         }
       ],
       "next": "call_fragment",
-      "channel": "narration"
+      "channel": "narration",
+      "case_id": "tutorial_mirna_auto_robado"
     },
     {
       "id": "intro",
@@ -515,14 +517,6 @@
           "answer": "rossie",
           "hint": "Anotá el nombre del local que mencionó la llamante",
           "errorMsg": "❌ Ese no es el local. Escuchá bien: Mirna dijo que fue a un local en Tobalaba."
-        },
-        {
-          "speaker": "MENSAJE",
-          "text": "Le comparto una foto del lugar exacto."
-        },
-        {
-          "speaker": "MENSAJE",
-          "text": "Le mando una nota de voz con más detalles."
         }
       ],
       "choices": [
@@ -532,13 +526,85 @@
           "options": [
             {
               "label": "Responderle",
-              "goto": "dispatch_choice",
-              "beats": []
+              "beats": [
+                {
+                  "speaker": "ERIC",
+                  "text": "¿Sí, señora?"
+                },
+                {
+                  "speaker": "MENSAJE",
+                  "text": "Acabo de concretar mi tercer divorcio, Eric. Es señorita de nuevo, ¿ya?"
+                },
+                {
+                  "speaker": "ERIC",
+                  "text": "Muy bien... señorita Mirna"
+                },
+                {
+                  "kind": "tool-search",
+                  "tool": "address"
+                },
+                {
+                  "speaker": "ERIC",
+                  "text": "Señorita Mirna, entonces, y según lo que puedo ver en el mapa, usted se encuentra en Av. Tobalaba 947, comuna de Providencia"
+                },
+                {
+                  "speaker": "ERIC",
+                  "text": "¿Podría darme la patente del vehículo?"
+                },
+                {
+                  "speaker": "MENSAJE",
+                  "text": "Eric, la patente de mi auto es TVBA-20"
+                },
+                {
+                  "kind": "input",
+                  "field": "plate",
+                  "setValue": "TVBA-20",
+                  "answer": "tvba",
+                  "hint": "Anotá la patente del vehículo robado"
+                },
+                {
+                  "speaker": "MENSAJE",
+                  "text": "Es un BMW SUV y tiene que ser el más barato"
+                },
+                {
+                  "kind": "tool-search",
+                  "tool": "vehicle"
+                },
+                {
+                  "speaker": "ERIC",
+                  "text": "Señorita Mirna, el modelo más económico de la línea SUV de BMW es el X1, ¿correcto?"
+                },
+                {
+                  "speaker": "MENSAJE",
+                  "text": "Suena correcto, Eric"
+                },
+                {
+                  "speaker": "ERIC",
+                  "text": "Por último, ¿me confirma el color del vehículo?"
+                },
+                {
+                  "speaker": "MENSAJE",
+                  "text": "Blanco, Eric. Y es señorita..."
+                },
+                {
+                  "kind": "input",
+                  "field": "color",
+                  "setValue": "BMW X1 · blanco",
+                  "answer": "blanco",
+                  "hint": "Anotá el color del vehículo"
+                },
+                {
+                  "speaker": "ERIC",
+                  "text": "Muy bien, señorita Mirna. Con esos datos ya puedo gestionar el despacho de emergencia."
+                }
+              ],
+              "goto": "dispatch_choice"
             }
           ]
         }
       ],
-      "channel": "911"
+      "channel": "911",
+      "case_id": "tutorial_mirna_auto_robado"
     },
     {
       "id": "manual_search",
@@ -624,7 +690,8 @@
         }
       ],
       "next": "investigation",
-      "channel": "911"
+      "channel": "911",
+      "case_id": "tutorial_mirna_auto_robado"
     },
     {
       "id": "outro",
@@ -656,7 +723,8 @@
           "text": "Son las 10:45."
         }
       ],
-      "channel": "narration"
+      "channel": "narration",
+      "case_id": "tutorial_mirna_auto_robado"
     },
     {
       "id": "pre_alert",
