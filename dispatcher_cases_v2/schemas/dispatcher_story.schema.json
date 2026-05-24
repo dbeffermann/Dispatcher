@@ -1,0 +1,250 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "dispatcher_story.schema.json",
+  "title": "Dispatcher Story V2",
+  "description": "Guion data-driven con soporte para múltiples casos. Scenes son el flujo; cases contienen campos, herramientas y despacho por caso.",
+  "type": "object",
+  "required": [
+    "start",
+    "scenes"
+  ],
+  "properties": {
+    "start": {
+      "type": "string"
+    },
+    "manual_categories": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "cases": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/case"
+      }
+    },
+    "scenes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/scene"
+      }
+    },
+    "case_fields": {
+      "type": "object",
+      "description": "LEGACY fallback. Preferir cases[].case_fields."
+    },
+    "tool_search": {
+      "type": "object",
+      "description": "LEGACY fallback. Preferir cases[].tool_search."
+    },
+    "dispatch_rules": {
+      "type": "object",
+      "description": "LEGACY fallback. Preferir cases[].dispatch_rules."
+    },
+    "emergency_scenes": {
+      "type": "array",
+      "description": "DEPRECATED. Usar scene.channel=\"911\"."
+    }
+  },
+  "definitions": {
+    "case": {
+      "type": "object",
+      "required": [
+        "id",
+        "title"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "start_scene": {
+          "type": "string"
+        },
+        "initial_facts": {
+          "type": "object"
+        },
+        "case_fields": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "factPath": {
+                "type": "string"
+              },
+              "logTemplate": {
+                "type": "string"
+              },
+              "notificationLabel": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "tool_search": {
+          "type": "object"
+        },
+        "dispatch_rules": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": true
+    },
+    "scene": {
+      "type": "object",
+      "required": [
+        "id"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "objective": {
+          "type": "string"
+        },
+        "channel": {
+          "type": "string",
+          "enum": [
+            "narration",
+            "911",
+            "whatsapp"
+          ]
+        },
+        "case_id": {
+          "type": "string",
+          "description": "Opcional. Si existe, la escena usa fields/tools/dispatch del case indicado."
+        },
+        "beats": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/beat"
+          }
+        },
+        "choices": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/choice"
+          }
+        },
+        "next": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": true
+    },
+    "beat": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "narration",
+            "vignette",
+            "sfx",
+            "ambient",
+            "input",
+            "tool-search",
+            "dispatch",
+            "wa"
+          ]
+        },
+        "text": {
+          "type": "string"
+        },
+        "speaker": {
+          "type": "string"
+        },
+        "field": {
+          "type": "string"
+        },
+        "setValue": {
+          "type": "string"
+        },
+        "answer": {
+          "type": "string"
+        },
+        "hint": {
+          "type": "string"
+        },
+        "tool": {
+          "type": "string"
+        },
+        "scene": {
+          "type": "string"
+        },
+        "sfx": {
+          "type": "string"
+        },
+        "ambient": {
+          "type": "string"
+        },
+        "stop": {
+          "type": "boolean"
+        },
+        "contact": {
+          "type": "string"
+        },
+        "mediaType": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "caption": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "choice": {
+      "type": "object",
+      "required": [
+        "at",
+        "options"
+      ],
+      "properties": {
+        "at": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "prompt": {
+          "type": "string"
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "label": {
+                "type": "string"
+              },
+              "beats": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/beat"
+                }
+              },
+              "goto": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": true
+          }
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}

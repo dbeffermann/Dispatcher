@@ -1,0 +1,2615 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Studio{% if current_project %} — {{ current_project.name }}{% endif %}</title>
+<style>
+/* ============================================================
+   RESET & BASE
+   ============================================================ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  height: 100%; width: 100%;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", sans-serif;
+  font-size: 13px;
+  background: #0f172a;
+}
+
+/* ============================================================
+   HEADER BAR
+   ============================================================ */
+#studio-header {
+  height: 46px;
+  background: #1e293b;
+  border-bottom: 1px solid #0f172a;
+  display: flex;
+  align-items: center;
+  padding: 0 8px 0 12px;
+  gap: 8px;
+  flex-shrink: 0;
+  z-index: 100;
+  user-select: none;
+}
+.sh-logo {
+  font-size: 14px; font-weight: 800; color: #f8fafc;
+  letter-spacing: -.3px; white-space: nowrap; display: flex; align-items: center; gap: 6px;
+}
+.sh-logo .sh-dot { width: 8px; height: 8px; border-radius: 50%; background: #3b82f6; flex-shrink: 0; }
+.sh-project {
+  font-size: 12px; color: #94a3b8; max-width: 180px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.sh-sep { color: #334155; font-size: 18px; font-weight: 100; }
+.sh-spacer { flex: 1; }
+
+#studio-search {
+  height: 28px;
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  color: #f1f5f9;
+  font-size: 12px;
+  padding: 0 10px;
+  width: 210px;
+  outline: none;
+  transition: border-color .15s;
+}
+#studio-search::placeholder { color: #475569; }
+#studio-search:focus { border-color: #3b82f6; }
+
+.sh-btn {
+  height: 30px; padding: 0 12px;
+  background: #334155; border: 1px solid #475569; border-radius: 6px;
+  color: #e2e8f0; font-size: 11px; font-weight: 600; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 5px;
+  text-decoration: none; white-space: nowrap; transition: background .12s;
+}
+.sh-btn:hover { background: #3f5068; border-color: #64748b; color: #f8fafc; }
+.sh-btn.accent { background: #2563eb; border-color: #1d4ed8; color: #fff; }
+.sh-btn.accent:hover { background: #1d4ed8; }
+.sh-btn.icon-only { padding: 0 10px; }
+
+
+
+/* ============================================================
+   MAIN LAYOUT — three-column flex
+   ============================================================ */
+#studio-layout {
+  display: flex;
+  height: calc(100vh - 46px);
+  overflow: hidden;
+}
+#studio-layout a[href*="/admin/"] {
+  display: none !important;
+}
+
+/* ============================================================
+   LEFT PANEL — tree
+   ============================================================ */
+#studio-left {
+  width: 268px;
+  min-width: 268px;
+  display: flex;
+  flex-direction: column;
+  background: #f8fafc;
+  border-right: 1px solid #e2e8f0;
+  overflow: hidden;
+  transition: width .18s ease, min-width .18s ease, opacity .15s ease;
+  flex-shrink: 0;
+}
+#studio-left.collapsed {
+  width: 0 !important;
+  min-width: 0 !important;
+  opacity: 0;
+  pointer-events: none;
+}
+.sl-header {
+  height: 38px;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  background: #f1f5f9;
+  border-bottom: 1px solid #e2e8f0;
+  flex-shrink: 0;
+  gap: 8px;
+}
+.sl-title { font-size: 11px; font-weight: 700; color: #475569; letter-spacing: .04em; text-transform: uppercase; flex: 1; }
+.sl-btn {
+  background: none; border: none; cursor: pointer;
+  color: #9ca3af; font-size: 11px; padding: 2px 5px; border-radius: 3px;
+}
+.sl-btn:hover { color: #374151; background: #e2e8f0; }
+#tree-body {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 4px 0 24px;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+
+/* ============================================================
+   CENTER PANEL — canvas
+   ============================================================ */
+#studio-center {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  overflow: hidden;
+  background: #07101d;
+}
+
+/* Floating canvas toolbar */
+#canvas-toolbar {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(8, 15, 28, 0.92);
+  border: 1px solid #1b2e54;
+  border-radius: 6px;
+  padding: 6px;
+  box-shadow: 0 8px 28px rgba(0,0,0,.28);
+  z-index: 20;
+  backdrop-filter: blur(4px);
+  user-select: none;
+}
+.ct-btn {
+  background: #0c1324; border: 1px solid #1b2e54; border-radius: 4px;
+  padding: 5px 12px; font-size: 11px; font-weight: 700;
+  cursor: pointer; color: #cdd6f4; white-space: nowrap;
+  transition: background .1s, border-color .1s, color .1s;
+  letter-spacing: .04em;
+}
+.ct-btn:hover { background: #101c35; border-color: #94e2d5; color: #94e2d5; }
+.ct-sep { width: 1px; height: 22px; background: #1b2e54; flex-shrink: 0; }
+
+/* Canvas wrap — fills the full center area */
+#flow-canvas-wrap {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  cursor: default;
+  user-select: none;
+  -webkit-user-select: none;
+}
+#flow-canvas {
+  transform-origin: 0 0;
+  will-change: transform;
+  display: inline-block;
+}
+#flow-canvas svg { display: block; }
+
+/* Node styles */
+.flow-node rect { transition: filter .1s; }
+.flow-node:hover rect { filter: brightness(0.93); }
+.flow-node.selected rect { filter: drop-shadow(0 0 6px rgba(29,78,216,.5)); }
+
+/* ============================================================
+   RIGHT PANEL — inspector
+   ============================================================ */
+#studio-right {
+  width: 380px;
+  min-width: 380px;
+  display: flex;
+  flex-direction: column;
+  background: #07101d;
+  border-left: 1px solid #1b2e54;
+  overflow: hidden;
+  transition: width .18s ease, min-width .18s ease, opacity .15s ease;
+  flex-shrink: 0;
+}
+#studio-right.collapsed {
+  width: 0 !important;
+  min-width: 0 !important;
+  opacity: 0;
+  pointer-events: none;
+}
+#insp-panel-header {
+  height: 38px;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  background: #0c1324;
+  border-bottom: 1px solid #1b2e54;
+  flex-shrink: 0;
+  gap: 6px;
+}
+.iph-title { font-size: 11px; font-weight: 700; color: #cdd6f4; letter-spacing: .04em; text-transform: uppercase; flex: 1; }
+#insp-close-btn {
+  display: none;
+  background: none; border: none; cursor: pointer;
+  color: #9ca3af; font-size: 18px; line-height: 1; padding: 2px 4px;
+}
+#insp-close-btn:hover { color: #f8fafc; }
+#inspector-body {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: #1b2e54 transparent;
+}
+
+/* ============================================================
+   SHARED COMPONENT STYLES (tree, inspector, badges, beats)
+   ============================================================ */
+
+/* --- Tree --- */
+.tree-section { border-bottom: 1px solid #e2e8f0; }
+.tree-section-head {
+  display: flex; align-items: center; gap: 6px;
+  padding: 7px 10px; cursor: pointer; user-select: none;
+  font-weight: 600; font-size: 12px;
+  background: #f8fafc; color: #334155;
+}
+.tree-section-head:hover { background: #e2e8f0; }
+.tree-toggle { font-size: 10px; color: #94a3b8; width: 12px; }
+.tree-body { padding: 2px 0 6px; display: none; }
+.tree-body.open { display: block; }
+.tree-item {
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 10px 4px 20px; cursor: pointer;
+  color: #374151; line-height: 1.3; transition: background .1s;
+}
+.tree-item:hover { background: #dbeafe; }
+.tree-item.selected { background: #bfdbfe; font-weight: 600; }
+.tree-item.has-warning { border-left: 3px solid #f59e0b; padding-left: 17px; }
+.tree-item .scene-id { font-family: monospace; font-size: 11px; color: #6b7280; }
+.tree-item .item-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tree-item.search-hidden { display: none; }
+.tree-sub-item {
+  display: flex; align-items: center; gap: 5px;
+  padding: 3px 10px 3px 20px; cursor: pointer; color: #6b7280; font-size: 11px;
+}
+.tree-sub-item:hover { background: #f0f9ff; color: #1e40af; }
+.tree-sub-item.selected { background: #dbeafe; color: #1e40af; }
+
+/* --- Inspector --- */
+.inspector-empty {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  height: 100%; color: #64748b; gap: 10px; padding: 24px; text-align: center;
+}
+.inspector-empty svg { opacity: .3; }
+.insp-section { border-bottom: 1px solid #e2e8f0; padding: 14px 16px; }
+.insp-title { font-size: 17px; font-weight: 800; color: #0f172a; margin-bottom: 6px; }
+.insp-id { font-family: monospace; font-size: 12px; color: #334155; margin-bottom: 10px; }
+.insp-meta { font-size: 13px; color: #0f172a; line-height: 1.8; }
+.insp-meta b { color: #1e293b; }
+.insp-objective { font-size: 12px; color: #334155; font-style: italic; margin-top: 6px; }
+.insp-sub-title {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .06em; color: #475569; margin-bottom: 8px;
+}
+.insp-edit-btn {
+  display: inline-block;
+  background: #1d4ed8; color: #ffffff !important;
+  border: none; border-radius: 5px;
+  padding: 5px 14px; font-size: 12px; cursor: pointer;
+  text-decoration: none !important; font-weight: 700; letter-spacing: .01em;
+}
+.insp-edit-btn:hover { background: #1e40af; }
+.field-pill {
+  display: inline-block; font-family: monospace; font-size: 10px;
+  background: #f0fdf4; border: 1px solid #86efac; color: #166534;
+  border-radius: 4px; padding: 1px 6px; margin: 2px 2px 2px 0;
+}
+.tool-pill {
+  display: inline-block; font-family: monospace; font-size: 10px;
+  background: #fdf4ff; border: 1px solid #d8b4fe; color: #6b21a8;
+  border-radius: 4px; padding: 1px 6px; margin: 2px 2px 2px 0;
+}
+
+/* --- Beats --- */
+.beat-item {
+  padding: 5px 8px; border-radius: 5px; margin-bottom: 4px;
+  background: #f8fafc; border: 1px solid #e2e8f0;
+  font-size: 11px; line-height: 1.5; color: #1e293b;
+}
+.beat-item .beat-speaker { font-weight: 700; color: #1e40af; }
+.beat-item.beat-narration { background: #fef3c7; border-color: #d97706; color: #78350f; }
+.beat-item.beat-input     { background: #f0fdf4; border-color: #86efac; }
+.beat-item.beat-tool      { background: #fdf4ff; border-color: #d8b4fe; }
+.beat-item.beat-vignette  { background: #fff7ed; border-color: #fdba74; }
+.beat-item.beat-wa        { background: #ecfeff; border-color: #67e8f9; }
+.beat-item.beat-sfx       { background: #eef2ff; border-color: #a5b4fc; }
+.beat-item.beat-ambient   { background: #f0fdf4; border-color: #86efac; }
+.beat-item.cat-readonly   { border-left: 3px solid #86efac; }
+.beat-item.cat-action     { border-left: 3px solid #f87171; }
+.beat-item.cat-transition { border-left: 3px solid #fbbf24; }
+
+.beat-summary {
+  display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
+  font-size: 11px; padding: 5px 10px;
+  background: #f8fafc; border-radius: 5px; border: 1px solid #e2e8f0;
+  margin-top: 8px; color: #475569;
+}
+.beat-summary .bs-sep { color: #cbd5e1; }
+.beat-summary .bs-action b { color: #dc2626; }
+.beat-summary .bs-transition b { color: #d97706; }
+
+.scene-vig-pill {
+  display: inline-block; font-size: 10px; color: #9a3412;
+  background: #fff7ed; border: 1px solid #fdba74; border-radius: 10px;
+  padding: 1px 6px; margin-left: 6px;
+}
+
+/* --- Badges --- */
+.badge {
+  display: inline-flex; align-items: center;
+  font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 4px;
+  letter-spacing: .04em; white-space: nowrap;
+}
+.badge-global     { background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; }
+.badge-case       { background: #f5f3ff; color: #6d28d9; border: 1px solid #ddd6fe; }
+.badge-scene      { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
+.badge-911        { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
+.badge-choice     { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; }
+.badge-input      { background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
+.badge-toolsearch { background: #fefce8; color: #854d0e; border: 1px solid #fde047; }
+.badge-dispatch   { background: #fff1f2; color: #9f1239; border: 1px solid #fecdd3; }
+.badge-asset      { background: #f5f3ff; color: #5b21b6; border: 1px solid #c4b5fd; font-weight: 700; }
+.badge-narration  { background: #fef08a; color: #78350f; border: 1px solid #d97706; }
+.badge-orphan     { background: #fffbeb; color: #92400e; border: 1px solid #fde68a; }
+.badge-sfx        { background: #eef2ff; color: #3730a3; border: 1px solid #818cf8; }
+.badge-ambient    { background: #f0fdf4; color: #14532d; border: 1px solid #4ade80; }
+
+/* --- Warnings --- */
+.warnings-list { padding: 8px 12px; }
+.warn-item {
+  display: flex; gap: 8px; align-items: flex-start;
+  padding: 6px 8px; margin-bottom: 5px; border-radius: 5px;
+  font-size: 11px; cursor: pointer;
+}
+.warn-item.severity-error   { background: #fef2f2; border-left: 3px solid #ef4444; }
+.warn-item.severity-warning { background: #fffbeb; border-left: 3px solid #f59e0b; }
+.warn-item:hover { filter: brightness(.97); }
+.warn-scene  { font-family: monospace; font-weight: 700; color: #374151; min-width: 80px; }
+.warn-detail { color: #6b7280; flex: 1; }
+.warn-icon   { font-size: 13px; }
+
+/* --- Timeline choices --- */
+.tl-choice-wrap { margin: 3px 0 5px 14px; position: relative; }
+.tl-choice-wrap::before {
+  content: ''; position: absolute; left: -8px; top: 0; bottom: 0;
+  border-left: 2px dashed #93c5fd;
+}
+.tl-choice-detail { border: 1px solid #bfdbfe; border-radius: 6px; background: #eff6ff; overflow: hidden; }
+.tl-choice-detail > summary {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 10px; font-size: 11px; font-weight: 700; color: #1e40af;
+  cursor: pointer; list-style: none; user-select: none;
+}
+.tl-choice-detail > summary::-webkit-details-marker { display: none; }
+.tl-choice-detail > summary::before { content: '&#9654;'; font-size: 9px; color: #93c5fd; flex-shrink: 0; }
+.tl-choice-detail[open] > summary::before { content: '&#9660;'; }
+.tl-choice-prompt { flex: 1; min-width: 0; }
+.tl-choice-edit { font-size: 10px; color: #1d4ed8; text-decoration: none; flex-shrink: 0; font-weight: 700; }
+.tl-choice-edit:hover { text-decoration: underline; }
+.tl-choice-body { padding: 4px 8px 8px; }
+.tl-choice-controls,
+.tl-option-controls,
+.tl-option-add {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.tl-choice-controls label,
+.tl-option-controls label {
+  font-size: 10px;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: .02em;
+}
+.tl-choice-controls input,
+.tl-choice-controls select,
+.tl-option-controls input,
+.tl-option-controls select,
+.tl-option-add input,
+.tl-option-add select {
+  width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 5px;
+  background: #fff;
+  color: #0f172a;
+  font-size: 11px;
+  padding: 5px 7px;
+}
+.tl-choice-controls .sh-btn,
+.tl-option-controls .sh-btn,
+.tl-option-add .sh-btn {
+  justify-content: center;
+  grid-column: span 2;
+}
+.tl-option-add {
+  padding: 6px 8px;
+  background: #faf5ff;
+  border-top: 1px dashed #ddd6fe;
+}
+.tl-option { margin-bottom: 5px; border: 1px solid #ddd6fe; border-radius: 4px; background: #f5f3ff; overflow: hidden; }
+.tl-option-detail > summary {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 8px; font-size: 11px; font-weight: 600; color: #5b21b6;
+  cursor: pointer; list-style: none; user-select: none;
+}
+.tl-option-detail > summary::-webkit-details-marker { display: none; }
+.tl-option-detail > summary::before { content: '&#9654;'; font-size: 9px; color: #a78bfa; flex-shrink: 0; }
+.tl-option-detail[open] > summary::before { content: '&#9660;'; }
+.tl-option-nobeats { display: flex; align-items: center; gap: 6px; padding: 5px 8px; font-size: 11px; font-weight: 600; color: #5b21b6; }
+.tl-opt-label { flex: 1; min-width: 0; }
+.tl-opt-goto { font-family: monospace; font-size: 10px; background: #ede9fe; color: #6b21a8; padding: 1px 6px; border-radius: 3px; flex-shrink: 0; }
+.tl-opt-goto.broken { background: #fef2f2; color: #dc2626; }
+.tl-opt-goto.continues { background: #ecfdf5; color: #059669; }
+.tl-opt-edit { font-size: 10px; color: #1d4ed8; text-decoration: none; flex-shrink: 0; font-weight: 700; }
+.tl-opt-edit:hover { text-decoration: underline; }
+.tl-option-beats { padding: 6px 8px 4px; border-top: 1px solid #ddd6fe; background: #faf5ff; }
+.tl-option-beats .beat-item { margin-bottom: 3px; font-size: 10.5px; }
+.search-highlight { background: #fde047; border-radius: 2px; color: #1e293b; }
+
+/* Search results panel */
+#search-input-wrap { position: relative; }
+#search-results-panel {
+  display: none;
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 420px;
+  max-width: 520px;
+  max-height: 380px;
+  overflow-y: auto;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0,0,0,.55);
+  z-index: 9999;
+  font-size: 12px;
+}
+.srp-header {
+  padding: 6px 12px 4px;
+  color: #64748b;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  border-bottom: 1px solid #334155;
+}
+.srp-scene {
+  padding: 7px 12px 7px;
+  border-bottom: 1px solid #1e293b;
+  cursor: pointer;
+  transition: background .1s;
+}
+.srp-scene:hover { background: #273449; }
+.srp-scene-title {
+  font-weight: 700;
+  color: #93c5fd;
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.srp-scene-name { color: #cbd5e1; font-weight: 400; margin-left: 5px; }
+.srp-beat {
+  color: #94a3b8;
+  font-size: 10.5px;
+  padding: 1px 0 1px 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.srp-speaker { color: #c4b5fd; font-weight: 600; }
+.srp-badge { font-size: 9px; padding: 1px 5px; border-radius: 3px; background:#334155; color:#94a3b8; margin-right:4px; vertical-align:middle; }
+.srp-more { color: #475569; font-size: 10px; padding: 1px 0 2px 8px; }
+.srp-empty { padding: 12px; color: #64748b; text-align: center; font-size: 11px; }
+
+/* ============================================================
+   STUDIO EDITOR — scene inspector edit mode
+   ============================================================ */
+
+/* Root container */
+.se-root { font-size: 13px; }
+
+/* Sections */
+.se-section {
+  border-bottom: 1px solid #1b2e54;
+  padding: 14px 16px;
+}
+.se-section-title {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .06em; color: #94e2d5;
+}
+.se-scene-id {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 10px;
+}
+.se-scene-id code {
+  font-size: 13px; font-weight: 700; color: #f8fafc;
+  background: #101c35; border: 1px solid #1b2e54; padding: 2px 8px; border-radius: 4px;
+}
+
+/* Warnings */
+.se-warnings { margin-bottom: 10px; }
+.se-warn-row {
+  padding: 5px 8px; border-radius: 4px; font-size: 11px; margin-bottom: 3px;
+}
+.se-warn-row.sev-error   { background: #240a0a; border-left: 3px solid #ef4444; color: #fecaca; }
+.se-warn-row.sev-warning { background: #221806; border-left: 3px solid #f59e0b; color: #f9e2af; }
+
+/* Form fields */
+.se-fields { display: flex; flex-direction: column; gap: 6px; }
+.se-field-row { display: flex; flex-direction: column; gap: 3px; }
+.se-label {
+  font-size: 11px; font-weight: 600; color: #89a2c7;
+  text-transform: uppercase; letter-spacing: .04em;
+}
+.se-input {
+  width: 100%; padding: 6px 9px; font-size: 12px;
+  border: 1px solid #1b2e54; border-radius: 5px;
+  background: #0c1324; color: #f8fafc;
+  transition: border-color .12s, background .12s;
+  font-family: inherit;
+}
+.se-input:focus { outline: none; border-color: #94e2d5; background: #101c35; }
+.se-input option { background: #0c1324; color: #f8fafc; }
+.se-select { cursor: pointer; }
+.se-textarea { resize: vertical; min-height: 52px; line-height: 1.5; }
+
+/* Vignette pick row */
+.se-vig-pick-row { display: flex; gap: 6px; align-items: center; }
+.se-vig-preview {
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px 6px; background: #fff7ed; border-radius: 4px;
+  border: 1px solid #fed7aa; margin-top: 4px;
+}
+.se-vig-label { font-size: 11px; color: #9a3412; font-weight: 600; font-family: monospace; }
+.se-help {
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: #89a2c7;
+}
+
+/* Buttons */
+.se-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: 34px; padding: 7px 13px; border-radius: 4px;
+  font-family: 'Courier New', monospace; font-size: 11px; font-weight: 700;
+  letter-spacing: .06em; text-transform: uppercase;
+  cursor: pointer; border: 1px solid transparent;
+  transition: background .12s, border-color .12s, color .12s, box-shadow .12s;
+}
+.se-btn-save {
+  background: #0e2018; color: #a6e3a1; border-color: #2b6b4b;
+}
+.se-btn-save:hover { background: #143025; border-color: #a6e3a1; box-shadow: 0 0 12px rgba(166,227,161,.18); }
+.se-btn-save:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
+.se-btn-save.dirty { background: #1c1600; border-color: #f9e2af; color: #f9e2af; }
+.se-btn-add {
+  background: #16a34a; color: #fff; border-color: #15803d;
+  font-size: 11px; padding: 4px 10px;
+}
+.se-btn-add:hover { background: #15803d; }
+.se-btn-pick {
+  background: #f1f5f9; color: #334155; border-color: #cbd5e1;
+  font-size: 11px; padding: 5px 10px; white-space: nowrap;
+}
+.se-btn-pick:hover { background: #e2e8f0; }
+.se-btn-secondary {
+  background: #101c35; color: #94e2d5; border-color: #1b2e54;
+}
+.se-btn-secondary:hover { background: #0f2535; border-color: #94e2d5; }
+.se-btn-danger {
+  background: transparent; color: #ff6b6b; border-color: #5c1010;
+}
+.se-btn-danger:hover { background: #1a0808; border-color: #ff6b6b; }
+
+/* Meta actions row */
+.se-meta-actions {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: center; gap: 8px; margin-top: 12px;
+}
+.se-meta-actions .se-status { grid-column: 1 / -1; min-height: 14px; }
+.se-status { font-size: 11px; font-weight: 600; }
+.se-status.ok { color: #a6e3a1; }
+.se-status.err { color: #ff6b6b; }
+
+/* Beats section header */
+.se-beats-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 8px;
+}
+.se-no-beats { color: #94a3b8; font-size: 12px; padding: 8px 0; }
+
+/* Narrative choice slots */
+.se-choice-slot {
+  border: 1px dashed #1b2e54;
+  border-radius: 7px;
+  padding: 8px;
+  margin-bottom: 8px;
+  background: #07101d;
+}
+.se-choice-slot-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.se-choice-slot-label {
+  font-size: 11px;
+  color: #89a2c7;
+  font-weight: 700;
+}
+.se-choice-slot-empty {
+  font-size: 11px;
+  color: #64748b;
+  font-style: italic;
+}
+
+.se-seq-insert {
+  display: flex;
+  justify-content: center;
+  margin: 6px 0;
+}
+.se-seq-insert-btn {
+  border: 1px dashed #1b2e54;
+  background: #07101d;
+  color: #94a3b8;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.se-seq-insert-btn:hover {
+  border-color: #94e2d5;
+  color: #94e2d5;
+}
+.se-seq-insert.drag-over .se-seq-insert-btn {
+  border-color: #3b82f6;
+  color: #dbeafe;
+  background: #132447;
+}
+
+.se-choice-card {
+  border: 1px solid #2a4273;
+  border-radius: 7px;
+  background: #0b1730;
+  margin: 6px 0;
+  overflow: hidden;
+}
+.se-choice-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: #132447;
+}
+.se-choice-title {
+  flex: 1;
+  font-size: 11px;
+  color: #dbeafe;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.se-choice-body {
+  padding: 8px 10px;
+  display: grid;
+  gap: 8px;
+}
+.se-choice-grid {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px;
+  align-items: center;
+}
+.se-choice-option-row {
+  display: grid;
+  grid-template-columns: 1fr 180px auto auto;
+  gap: 6px;
+  align-items: center;
+}
+
+.se-beat-card[draggable="true"],
+.se-choice-card[draggable="true"] {
+  cursor: grab;
+}
+.se-beat-card.dragging,
+.se-choice-card.dragging {
+  opacity: 0.45;
+}
+
+/* Beat card */
+.se-beat-card {
+  border: 1px solid #1b2e54; border-radius: 7px;
+  background: #0c1324; margin-bottom: 6px; overflow: hidden;
+  transition: border-color .1s;
+}
+.se-beat-card:hover { border-color: #94e2d5; }
+
+.se-beat-head {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 10px; background: #101c35; cursor: default;
+  min-height: 34px;
+}
+.se-beat-order {
+  font-family: monospace; font-size: 10px; color: #89a2c7;
+  background: #07101d; border: 1px solid #1b2e54; border-radius: 3px; padding: 0 4px; min-width: 20px;
+  text-align: center;
+}
+.se-beat-icon { font-size: 13px; flex-shrink: 0; }
+.se-beat-kind {
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .04em; color: #cdd6f4; white-space: nowrap;
+}
+.se-beat-summary {
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; font-size: 11px; color: #89a2c7;
+}
+.se-beat-actions {
+  display: flex; gap: 2px; flex-shrink: 0; margin-left: 4px;
+}
+.se-icon-btn {
+  padding: 2px 6px; background: transparent; border: 1px solid #1b2e54;
+  border-radius: 4px; cursor: pointer; font-size: 11px; color: #89a2c7;
+  transition: background .1s;
+}
+.se-icon-btn:hover:not(:disabled) { background: #0f2535; color: #94e2d5; }
+.se-icon-btn:disabled { opacity: .35; cursor: not-allowed; }
+.se-icon-delete:hover:not(:disabled) { background: #fef2f2 !important; color: #dc2626 !important; border-color: #fecaca !important; }
+.se-icon-transfer:hover:not(:disabled) { background: #e0e7ff !important; color: #3730a3 !important; border-color: #c7d2fe !important; }
+
+.se-beat-body {
+  padding: 10px 12px; border-top: 1px solid #1b2e54;
+  display: flex; flex-direction: column; gap: 8px;
+  background: #07101d;
+}
+.se-beat-save-row {
+  display: flex; align-items: center; gap: 10px; padding-top: 6px;
+  border-top: 1px solid #1b2e54; margin-top: 4px;
+}
+
+/* Kind-select menu */
+.se-kind-menu {
+  position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  background: #fff; border: 1px solid #d1d5db; border-radius: 10px;
+  box-shadow: 0 8px 32px rgba(0,0,0,.2); z-index: 500;
+  padding: 16px; width: 340px;
+}
+.se-kind-menu-title {
+  font-size: 12px; font-weight: 700; color: #374151; margin-bottom: 10px;
+  text-transform: uppercase; letter-spacing: .05em;
+}
+.se-kind-btns {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;
+}
+.se-kind-btn {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 10px 6px; border: 1px solid #e2e8f0; border-radius: 7px;
+  cursor: pointer; background: #f8fafc; font-size: 11px; font-weight: 600; color: #374151;
+  transition: background .1s, border-color .1s;
+}
+.se-kind-btn:hover { background: #dbeafe; border-color: #93c5fd; color: #1e40af; }
+
+/* Vignette picker modal */
+.vig-picker-backdrop {
+  position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 400;
+}
+.vig-picker-modal {
+  position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  background: #fff; border-radius: 10px; box-shadow: 0 8px 40px rgba(0,0,0,.3);
+  z-index: 401; width: min(520px, 90vw); max-height: 70vh;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.vig-picker-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px; border-bottom: 1px solid #e2e8f0;
+  font-size: 13px; font-weight: 700; color: #1e293b;
+}
+.vig-picker-close {
+  background: none; border: none; cursor: pointer;
+  font-size: 16px; color: #64748b; padding: 2px 6px; border-radius: 4px;
+}
+.vig-picker-close:hover { background: #f1f5f9; color: #0f172a; }
+.vig-picker-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 8px; padding: 12px; overflow-y: auto;
+}
+.vig-thumb {
+  border: 2px solid #e2e8f0; border-radius: 7px; padding: 8px;
+  cursor: pointer; text-align: center; background: #f8fafc;
+  transition: border-color .12s, background .12s;
+}
+.vig-thumb:hover { border-color: #3b82f6; background: #eff6ff; }
+.vig-thumb-img {
+  height: 64px; display: flex; align-items: center; justify-content: center;
+  margin-bottom: 4px; overflow: hidden; border-radius: 4px;
+  background: #f1f5f9;
+}
+.vig-thumb-img img { width: 100%; height: 100%; object-fit: cover; }
+.vig-thumb-label {
+  font-size: 10px; font-weight: 700; font-family: monospace; color: #334155;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.vig-thumb-sub {
+  font-size: 10px; color: #94a3b8;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* Beat transfer modal */
+.bt-backdrop {
+  position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 405;
+}
+.bt-modal {
+  position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  background: #fff; border-radius: 10px; box-shadow: 0 8px 40px rgba(0,0,0,.3);
+  z-index: 406; width: min(560px, 92vw); max-height: 80vh;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.bt-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px; border-bottom: 1px solid #e2e8f0;
+}
+.bt-title { font-size: 13px; font-weight: 700; color: #0f172a; }
+.bt-close {
+  background: none; border: none; cursor: pointer;
+  font-size: 16px; color: #64748b; padding: 2px 6px; border-radius: 4px;
+}
+.bt-close:hover { background: #f1f5f9; color: #0f172a; }
+.bt-body { padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; }
+.bt-sub { font-size: 12px; color: #475569; }
+.bt-row { display: flex; flex-direction: column; gap: 6px; }
+.bt-label { font-size: 12px; font-weight: 600; color: #334155; }
+.bt-modes { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: #334155; }
+.bt-modes label { display: inline-flex; align-items: center; gap: 6px; }
+.bt-foot {
+  display: flex; align-items: center; justify-content: flex-end; gap: 8px;
+  padding: 12px 16px; border-top: 1px solid #e2e8f0;
+}
+</style>
+</head>
+
+<body>
+
+{% if not story_data %}
+<!-- No data state -->
+<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;color:#94a3b8;gap:12px;background:#0f172a;">
+  <div style="font-size:48px;">🗺</div>
+  <h2 style="color:#f8fafc;">No hay proyectos</h2>
+  <p>Ejecuta <code style="background:#1e293b;padding:2px 8px;border-radius:4px;">python manage.py import_dispatcher_json</code> para importar datos.</p>
+  <a href="/admin/" style="color:#3b82f6;">&#8592; Ir al Admin</a>
+</div>
+
+{% else %}
+{{ story_data|json_script:"story-data" }}
+
+<!-- ============================================================
+     HEADER
+     ============================================================ -->
+<header id="studio-header">
+
+  <!-- Left toggles + logo -->
+  <button class="sh-btn icon-only" onclick="toggleStudioLeft()" title="Mostrar/ocultar árbol (T)">&#9776;</button>
+
+  <div class="sh-logo">
+    <span class="sh-dot"></span>
+    Studio
+  </div>
+  <span class="sh-sep">|</span>
+  <span class="sh-project" title="{{ current_project.name }}">{{ current_project.name }}</span>
+
+  <span class="sh-sep">|</span>
+
+  <!-- Search -->
+  <div id="search-input-wrap">
+    <input type="text" id="studio-search" placeholder="Buscar escena, beat, texto…"
+           oninput="doSearch(this.value)"
+           onkeydown="if(event.key==='Escape'){this.value='';doSearch('');}" />
+    <div id="search-results-panel"></div>
+  </div>
+
+  <span class="sh-spacer"></span>
+
+  <!-- Right actions -->
+  <button class="sh-btn" type="button" onclick="createAndOpenScene()" title="Crear una escena nueva">+ Nueva escena</button>
+
+  <button class="sh-btn accent" id="export-btn"
+          onclick="exportToGame()"
+          title="Exportar DB → dispatcher_story.json + dispatcher_assets.json">
+    &#9654; Exportar al juego
+  </button>
+
+  <button class="sh-btn icon-only" onclick="fitFlowView()" title="Ajustar canvas (F)">&#9633; Fit</button>
+  <button class="sh-btn icon-only" onclick="toggleStudioFullscreen()" title="Pantalla completa (Shift+F)">&#9974;</button>
+  <button class="sh-btn icon-only" onclick="toggleStudioRight()" title="Mostrar/ocultar inspector (I)">&#9639;</button>
+
+</header>
+
+<!-- ============================================================
+     MAIN LAYOUT
+     ============================================================ -->
+<div id="studio-layout">
+
+  <!-- LEFT: TREE -->
+  <aside id="studio-left">
+    <div class="sl-header">
+      <span class="sl-title">&#128466; Árbol</span>
+      <button class="sl-btn" onclick="expandAll()" title="Expandir todo">&#9660;&#9660;</button>
+    </div>
+    <div id="tree-body"></div>
+  </aside>
+
+  <!-- CENTER: CANVAS -->
+  <main id="studio-center">
+
+    <!-- Floating toolbar -->
+    <div id="canvas-toolbar">
+      <button class="ct-btn" onclick="fitFlowView()" title="Ajustar al viewport">&#9633; Fit</button>
+      <div class="ct-sep"></div>
+      <button class="ct-btn" onclick="adjustZoom(1.2)" title="Acercar (+)">+</button>
+      <button class="ct-btn" onclick="adjustZoom(0.8)" title="Alejar (-)">&#8722;</button>
+    </div>
+
+    <!-- Pan/zoom container -->
+    <div id="flow-canvas-wrap">
+      <div id="flow-canvas"></div>
+    </div>
+
+  </main>
+
+  <!-- RIGHT: INSPECTOR -->
+  <aside id="studio-right">
+    <div id="insp-panel-header">
+      <span class="iph-title">&#128269; Inspector</span>
+      <button id="insp-close-btn" onclick="clearInspector()" title="Cerrar">&#215;</button>
+    </div>
+    <div id="inspector-body">
+      <div class="inspector-empty">
+        <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
+          <circle cx="11" cy="11" r="8"/>
+          <path d="m21 21-4.35-4.35"/>
+        </svg>
+        <span style="color:#94a3b8;">Selecciona una escena<br>para ver sus detalles</span>
+      </div>
+    </div>
+  </aside>
+
+</div><!-- #studio-layout -->
+
+<!-- Beat transfer modal (copy/move across scenes) -->
+<div id="beat-transfer-backdrop" class="bt-backdrop" style="display:none" onclick="closeBeatTransferModal()"></div>
+<div id="beat-transfer-modal" class="bt-modal" style="display:none">
+  <div class="bt-head">
+    <span class="bt-title">Mover o copiar beat</span>
+    <button class="bt-close" type="button" onclick="closeBeatTransferModal()">✕</button>
+  </div>
+  <div class="bt-body">
+    <div id="beat-transfer-sub" class="bt-sub">Selecciona escena destino y acción.</div>
+    <div class="bt-row">
+      <label class="bt-label" for="bt-target-scene">Escena destino</label>
+      <select id="bt-target-scene" class="se-input se-select"></select>
+    </div>
+    <div class="bt-row">
+      <span class="bt-label">Acción</span>
+      <div class="bt-modes">
+        <label><input type="radio" name="bt-mode" value="move" checked> Mover</label>
+        <label><input type="radio" name="bt-mode" value="copy"> Copiar</label>
+      </div>
+    </div>
+  </div>
+  <div class="bt-foot">
+    <button class="se-btn" type="button" onclick="closeBeatTransferModal()">Cancelar</button>
+    <button class="se-btn se-btn-save" type="button" id="bt-confirm-btn" onclick="confirmBeatTransfer()">Aplicar</button>
+  </div>
+</div>
+
+<script>
+{% include 'dispatcher_authoring/_story_map_js.html' %}
+
+// ============================================================
+// STUDIO-SPECIFIC CONTROLS
+// ============================================================
+function toggleStudioLeft() {
+  const el = document.getElementById('studio-left');
+  if (el) {
+    el.classList.toggle('collapsed');
+    setTimeout(() => fitFlowView(), 210);
+  }
+}
+
+function toggleStudioRight() {
+  const el = document.getElementById('studio-right');
+  if (el) {
+    el.classList.toggle('collapsed');
+    setTimeout(() => fitFlowView(), 210);
+  }
+}
+
+function toggleStudioFullscreen() {
+  if (!document.fullscreenElement) {
+    document.documentElement.requestFullscreen().catch(() => {});
+  } else {
+    document.exitFullscreen();
+  }
+}
+
+// Extra keyboard shortcuts for studio
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+  if (e.key === 't' || e.key === 'T') toggleStudioLeft();
+  if (e.key === 'i' || e.key === 'I') toggleStudioRight();
+  if (e.key === 'f' || e.key === 'F') { e.preventDefault(); fitFlowView(); }
+  if (e.key === 'F' && e.shiftKey) toggleStudioFullscreen();
+  if (e.key === '+' || e.key === '=') adjustZoom(1.15);
+  if (e.key === '-') adjustZoom(0.87);
+  if (e.key === '0') resetFlowLayout();
+});
+
+// ============================================================
+// EXPORT TO GAME
+// ============================================================
+function exportToGame() {
+  const btn = document.getElementById('export-btn');
+  const projectId = {{ current_project.id|default:'null' }};
+  if (!btn) return;
+  btn.disabled = true;
+  btn.textContent = '⏳ Exportando...';
+
+  const body = new URLSearchParams();
+  if (projectId) body.append('project_id', projectId);
+  const csrf = (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || '';
+
+  fetch('/studio/export/', {
+    method: 'POST',
+    headers: { 'X-CSRFToken': csrf, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: body.toString(),
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.ok) {
+      studioToast('success', `\u2713 Exportado: ${data.scenes} escenas → dispatcher_story.json`);
+    } else {
+      studioToast('error', `\u2717 Error: ${data.error}`);
+    }
+  })
+  .catch(err => studioToast('error', `\u2717 Error de red: ${err}`))
+  .finally(() => {
+    btn.disabled = false;
+    btn.textContent = '\u25b6 Exportar al juego';
+  });
+}
+
+// ============================================================
+// STUDIO API & TOAST HELPERS
+// ============================================================
+const STUDIO_PROJECT_ID = {{ current_project.id|default:'null' }};
+
+function csrfToken() {
+  return (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || '';
+}
+
+function studioFetch(url, method, body) {
+  const opts = {
+    method,
+    headers: { 'X-CSRFToken': csrfToken(), 'Content-Type': 'application/json' },
+  };
+  if (body !== undefined) opts.body = JSON.stringify(body);
+  return fetch(url, opts).then(r => r.json());
+}
+
+function nextNewSceneId() {
+  let i = 1;
+  while (DATA.scenes[`new_scene_${i}`]) i += 1;
+  return `new_scene_${i}`;
+}
+
+function _nextSceneIdFromList(sceneIds) {
+  const set = new Set(sceneIds || []);
+  let i = 1;
+  while (set.has(`new_scene_${i}`)) i += 1;
+  return `new_scene_${i}`;
+}
+
+async function nextNewSceneIdFromServer() {
+  if (!STUDIO_PROJECT_ID) return nextNewSceneId();
+  const res = await studioFetch(`/studio/api/scenes/?project=${STUDIO_PROJECT_ID}`, 'GET');
+  if (!res.ok || !Array.isArray(res.scenes)) return nextNewSceneId();
+  return _nextSceneIdFromList(res.scenes.map(s => s.scene_id));
+}
+
+async function createAndOpenScene() {
+  if (!STUDIO_PROJECT_ID) {
+    studioToast('error', 'No hay proyecto activo');
+    return;
+  }
+
+  const btn = document.querySelector('button[title="Crear una escena nueva"]');
+  if (btn) btn.disabled = true;
+
+  try {
+    let sceneId = await nextNewSceneIdFromServer();
+    let data = await studioFetch('/studio/api/scene/', 'POST', {
+      project_id: STUDIO_PROJECT_ID,
+      scene_id: sceneId,
+      title: 'Nueva escena',
+      channel: 'narration',
+      objective: '',
+    });
+
+    // If a parallel tab/user created the same id, retry once with fresh server state.
+    if (!data.ok && /ya existe/i.test(data.error || '')) {
+      sceneId = await nextNewSceneIdFromServer();
+      data = await studioFetch('/studio/api/scene/', 'POST', {
+        project_id: STUDIO_PROJECT_ID,
+        scene_id: sceneId,
+        title: 'Nueva escena',
+        channel: 'narration',
+        objective: '',
+      });
+    }
+
+    if (!data.ok) throw new Error(data.error || 'No se pudo crear la escena');
+
+    upsertSceneRecord(data.scene);
+    renderAll();
+    selectNode('scene', data.scene.scene_id);
+    setTimeout(() => {
+      if (selectedNodeId !== data.scene.scene_id || selectedNodeType !== 'scene') {
+        selectNode('scene', data.scene.scene_id);
+      }
+    }, 0);
+    studioToast('success', `Escena ${data.scene.scene_id} creada`);
+  } catch (err) {
+    studioToast('error', err.message || String(err));
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function studioToast(type, msg) {
+  let t = document.getElementById('studio-toast');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = 'studio-toast';
+    Object.assign(t.style, {
+      position: 'fixed', bottom: '24px', right: '24px', zIndex: '9999',
+      padding: '11px 18px', borderRadius: '8px', fontSize: '13px', fontWeight: '600',
+      boxShadow: '0 4px 16px rgba(0,0,0,.4)', transition: 'opacity .3s',
+      maxWidth: '400px', pointerEvents: 'none',
+    });
+    document.body.appendChild(t);
+  }
+  t.style.background = type === 'success' ? '#16a34a' : type === 'warning' ? '#d97706' : '#dc2626';
+  t.style.color = '#fff';
+  t.style.opacity = '1';
+  t.textContent = msg;
+  clearTimeout(t._tid);
+  t._tid = setTimeout(() => { t.style.opacity = '0'; }, 3500);
+}
+
+// ============================================================
+// STUDIO SCENE INSPECTOR — overrides shared renderSceneInspector
+// ============================================================
+
+// In-memory editor state: { beats: [...], dirty: bool }
+let _editorState = null;
+
+function renderSceneInspector(sid) {
+  const s = DATA.scenes[sid];
+  if (!s) return '<div style="padding:16px;color:#9ca3af;">Escena no encontrada.</div>';
+
+  const allSceneIds = Object.keys(DATA.scenes);
+  const currentNext = (s.next || s.next_scene_id || '').trim();
+  const nextInList = allSceneIds.includes(currentNext);
+  const cases = DATA.cases || [];
+  const warns = (DATA.warnings || []).filter(w => w.scene === sid);
+  const warnHtml = warns.length
+    ? `<div class="se-warnings">${warns.map(w => `
+        <div class="se-warn-row sev-${w.severity}">
+          ${w.severity === 'error' ? '🔴' : '🟡'} ${escHtml(w.detail)}
+        </div>`).join('')}</div>`
+    : '';
+
+  return `
+<div class="se-root" id="se-root-${escHtml(sid)}">
+
+  <!-- ── Scene meta ── -->
+  <div class="se-section">
+    <div class="se-scene-id">
+      <code>${escHtml(sid)}</code>
+      <span class="se-db-id" style="color:#94a3b8;font-size:10px;">db#${s.id}</span>
+    </div>
+    ${warnHtml}
+    <div class="se-fields">
+      <div class="se-field-row">
+         <label class="se-label">Nombre de escena</label>
+         <input class="se-input" id="se-scene-id" type="text" value="${escHtml(sid)}"
+           onchange="studioMarkDirty('${escHtml(sid)}')">
+            </div>
+            <div class="se-field-row">
+        <label class="se-label">Título</label>
+        <input class="se-input" id="se-title" type="text" value="${escHtml(s.title)}"
+               onchange="studioMarkDirty('${escHtml(sid)}')">
+      </div>
+      <div class="se-field-row">
+        <label class="se-label">Canal</label>
+        <select class="se-input se-select" id="se-channel"
+                onchange="studioMarkDirty('${escHtml(sid)}')">
+          <option value="" ${!s.channel ? 'selected' : ''}>Sin canal especial</option>
+          <option value="narration" ${s.channel === 'narration' ? 'selected' : ''}>Narración</option>
+          <option value="911" ${s.channel === '911' ? 'selected' : ''}>Canal 911</option>
+          <option value="whatsapp" ${s.channel === 'whatsapp' ? 'selected' : ''}>WhatsApp</option>
+        </select>
+      </div>
+      <div class="se-field-row">
+        <label class="se-label">Caso</label>
+        <select class="se-input se-select" id="se-case"
+                onchange="studioMarkDirty('${escHtml(sid)}')">
+          <option value="" ${!s.case_pk ? 'selected' : ''}>Fuera de un caso</option>
+          ${cases.map(c => `
+            <option value="${c.id}" ${String(s.case_pk || '') === String(c.id) ? 'selected' : ''}>${escHtml(c.title || c.case_id)}</option>
+          `).join('')}
+        </select>
+        <div class="se-help">Asocia la escena a un caso para que inputs, búsquedas y despacho usen la configuración correcta.</div>
+      </div>
+      <div class="se-field-row">
+        <label class="se-label">Siguiente</label>
+        <select class="se-input se-select" id="se-next-select"
+                onchange="onStudioNextSelectChange('${escHtml(sid)}')">
+          <option value="">— ninguna —</option>
+          ${allSceneIds.map(id => `
+            <option value="${escHtml(id)}" ${nextInList && currentNext === id ? 'selected' : ''}>${escHtml(id)}</option>
+          `).join('')}
+        </select>
+        <input class="se-input" id="se-next-manual" type="text"
+               placeholder="o escribe el nombre exacto de la escena"
+               value="${nextInList ? '' : escHtml(currentNext)}"
+               onchange="studioMarkDirty('${escHtml(sid)}')"
+               oninput="studioMarkDirty('${escHtml(sid)}')">
+      </div>
+      <div class="se-field-row">
+        <label class="se-label">Objetivo</label>
+        <textarea class="se-input se-textarea" id="se-objective" rows="2"
+                  onchange="studioMarkDirty('${escHtml(sid)}')
+">${escHtml(s.objective || '')}</textarea>
+      </div>
+    </div>
+    <div class="se-meta-actions">
+      <button class="se-btn se-btn-save" id="se-meta-save-btn"
+              onclick="saveSceneMeta('${escHtml(sid)}', ${s.id})">
+        Guardar escena
+      </button>
+      <button class="se-btn se-btn-danger" type="button"
+              onclick="deleteStudioScene('${escHtml(sid)}', ${s.id})">
+        Eliminar escena
+      </button>
+      <span id="se-meta-status" class="se-status"></span>
+    </div>
+  </div>
+
+  <!-- ── Secuencia narrativa ── -->
+  <div class="se-section">
+    <div class="se-beats-header">
+      <span class="se-section-title">Secuencia narrativa</span>
+      <button class="se-btn se-btn-add" onclick="openAddBeatMenu('${escHtml(sid)}', ${s.id})">
+        + Agregar beat
+      </button>
+    </div>
+    <div id="se-seq-${escHtml(sid)}">
+      ${renderNarrativeSequenceEditor(sid, s)}
+    </div>
+  </div>
+
+  <!-- Vignette picker modal (shared) -->
+  <div id="vig-picker-backdrop" class="vig-picker-backdrop" style="display:none"
+       onclick="closeVigPicker()"></div>
+  <div id="vig-picker-modal" class="vig-picker-modal" style="display:none">
+    <div class="vig-picker-header">
+      <span>Seleccionar Vignette</span>
+      <button onclick="closeVigPicker()" class="vig-picker-close">✕</button>
+    </div>
+    <div id="vig-picker-grid" class="vig-picker-grid"></div>
+  </div>
+
+  <!-- Add-beat kind menu -->
+  <div id="add-beat-menu" class="se-kind-menu" style="display:none">
+    <div class="se-kind-menu-title">Tipo de beat</div>
+    <div id="add-beat-menu-btns" class="se-kind-btns"></div>
+  </div>
+
+</div>`;
+}
+
+// ── Dirty tracking ──
+function studioMarkDirty(sid) {
+  const btn = document.getElementById('se-meta-save-btn');
+  if (btn) { btn.classList.add('dirty'); btn.textContent = 'Guardar escena *'; }
+}
+
+function refreshLocalReachabilityWarnings() {
+  const keep = (DATA.warnings || []).filter(w => !['orphan_scene', 'invalid_project_start'].includes(w.type));
+  for (const oid of (DATA.flow?.orphans || [])) {
+    keep.push({
+      type: 'orphan_scene',
+      scene: oid,
+      detail: `Escena "${oid}" está aislada: no tiene entradas ni salidas narrativas`,
+      admin_url: DATA.scenes[oid]?.admin_url || '#',
+      severity: 'warning',
+    });
+  }
+  DATA.warnings = keep;
+}
+
+function onStudioNextSelectChange(sid) {
+  const select = document.getElementById('se-next-select');
+  const manual = document.getElementById('se-next-manual');
+  if (select && manual && select.value) manual.value = '';
+  studioMarkDirty(sid);
+}
+
+// ── Save scene meta ──
+function saveSceneMeta(sid, sceneDbId) {
+  const newSceneId = document.getElementById('se-scene-id')?.value?.trim() || '';
+  const title     = document.getElementById('se-title')?.value ?? '';
+  const channel   = document.getElementById('se-channel')?.value ?? '';
+  const casePk    = document.getElementById('se-case')?.value ?? '';
+  const nextSelect = document.getElementById('se-next-select')?.value?.trim() || '';
+  const nextManual = document.getElementById('se-next-manual')?.value?.trim() || '';
+  const nextScene = nextManual || nextSelect;
+  const objective = document.getElementById('se-objective')?.value ?? '';
+
+  if (!newSceneId) {
+    studioToast('error', 'scene_id es obligatorio');
+    return;
+  }
+
+  const btn    = document.getElementById('se-meta-save-btn');
+  const status = document.getElementById('se-meta-status');
+  if (btn) { btn.disabled = true; btn.textContent = 'Guardando…'; }
+
+  studioFetch(`/studio/api/scene/${sceneDbId}/`, 'PATCH', {
+    scene_id: newSceneId,
+    title,
+    channel,
+    case_pk: casePk,
+    next_scene_id: nextScene,
+    objective,
+  })
+  .then(data => {
+    if (!data.ok) throw new Error(data.error || 'Error desconocido');
+    const effectiveSceneId = data.scene_id || newSceneId;
+    const sceneData = DATA.scenes[sid];
+    if (sceneData) {
+      if (effectiveSceneId !== sid) {
+        delete DATA.scenes[sid];
+        DATA.scenes[effectiveSceneId] = sceneData;
+
+        // Keep legacy string references coherent in the in-memory graph.
+        for (const scene of Object.values(DATA.scenes)) {
+          if (scene.next === sid) scene.next = effectiveSceneId;
+          if (scene.next_scene_id === sid) scene.next_scene_id = effectiveSceneId;
+          for (const choice of (scene.choices || [])) {
+            for (const option of (choice.options || [])) {
+              if (option.goto === sid) option.goto = effectiveSceneId;
+              if (option.goto_scene_id === sid) option.goto_scene_id = effectiveSceneId;
+            }
+          }
+        }
+      }
+
+      const s = DATA.scenes[effectiveSceneId];
+      s.scene_id  = effectiveSceneId;
+      s.title     = title;
+      s.channel   = channel;
+      s.case_pk   = data.case_pk || '';
+      s.case_id   = data.case_id || '';
+      s.next      = data.next_scene_id || nextScene;
+      s.next_scene_id = s.next;
+      s.objective = objective;
+    }
+    renderAll();
+    selectNode('scene', effectiveSceneId);
+    if (status) { status.textContent = '✓ Guardado'; status.className = 'se-status ok'; }
+    if (btn)    { btn.classList.remove('dirty'); btn.textContent = 'Guardar escena'; }
+    setTimeout(() => { if (status) status.textContent = ''; }, 2500);
+  })
+  .catch(err => {
+    if ((err.message || '').includes('Scene not found')) {
+      // The scene was removed/changed outside this tab; drop stale local node.
+      delete DATA.scenes[sid];
+      renderAll();
+      clearInspector();
+      studioToast('warning', 'La escena ya no existe en DB. Se recargó el mapa local.');
+      return;
+    }
+    studioToast('error', `Error al guardar: ${err.message}`);
+    if (btn) { btn.disabled = false; btn.textContent = 'Guardar escena *'; }
+  })
+  .finally(() => { if (btn) btn.disabled = false; });
+}
+
+function deleteStudioScene(sid, sceneDbId) {
+  if (!confirm(`Eliminar la escena "${sid}"? Esta acción no se puede deshacer.`)) return;
+  studioFetch(`/studio/api/scene/${sceneDbId}/`, 'DELETE')
+    .then(data => {
+      if (!data.ok) throw new Error(data.error || 'Error desconocido');
+
+      delete DATA.scenes[sid];
+
+      // Keep in-memory links coherent after delete.
+      for (const scene of Object.values(DATA.scenes)) {
+        if (scene.next === sid) scene.next = '';
+        if (scene.next_scene_id === sid) scene.next_scene_id = '';
+        for (const choice of (scene.choices || [])) {
+          for (const option of (choice.options || [])) {
+            if (option.goto === sid) option.goto = '';
+            if (option.goto_scene_id === sid) option.goto_scene_id = '';
+          }
+        }
+      }
+      if (DATA.project.start_scene_id === sid) DATA.project.start_scene_id = '';
+
+      rebuildStudioGraph();
+      refreshLocalReachabilityWarnings();
+      clearInspector();
+      renderAll();
+      studioToast('success', `Escena ${sid} eliminada`);
+    })
+    .catch(err => studioToast('error', `Error al eliminar escena: ${err.message}`));
+}
+
+function renderNarrativeSequenceEditor(sid, scene) {
+  const beats = (scene?.beats || []).slice().sort((a, b) => a.order - b.order);
+  const totalBeats = beats.length;
+  const choices = (scene?.choices || []).slice().sort((a, b) => a.at_beat - b.at_beat || a.id - b.id);
+  const byAt = {};
+  for (const ch of choices) {
+    const raw = Number.parseInt(ch.at_beat, 10);
+    const at = Number.isInteger(raw) ? Math.max(0, Math.min(totalBeats, raw)) : totalBeats;
+    if (!byAt[at]) byAt[at] = [];
+    byAt[at].push(ch);
+  }
+
+  let html = renderChoiceInsertPoint(sid, scene.id, 0);
+  beats.forEach((beat, idx) => {
+    html += renderBeatCard(sid, beat, idx, beats.length);
+    const at = idx + 1;
+    for (const ch of (byAt[at] || [])) html += renderChoiceSequenceCard(sid, scene, ch);
+    html += renderChoiceInsertPoint(sid, scene.id, at);
+  });
+
+  if (!beats.length && !(choices || []).length) {
+    html += '<div class="se-no-beats">Sin beats ni choices. Agrega un beat o inserta una choice.</div>';
+  } else if (!beats.length && (choices || []).length) {
+    for (const ch of (byAt[0] || [])) html += renderChoiceSequenceCard(sid, scene, ch);
+  }
+
+  return html;
+}
+
+function renderChoiceInsertPoint(sid, sceneDbId, atBeat) {
+  return `<div class="se-seq-insert"
+    ondragover="seqDragOver(event, '${escHtml(sid)}')"
+    ondragleave="seqDragLeave(event)"
+    ondrop="seqDropAtBoundary(event, '${escHtml(sid)}', ${atBeat})"><button class="se-seq-insert-btn" type="button"
+    onclick="createStudioChoiceFromScene('${escHtml(sid)}', ${sceneDbId}, ${atBeat})">+ Insertar choice aqui</button></div>`;
+}
+
+function renderChoiceSequenceCard(sid, scene, ch) {
+  const totalBeats = (scene?.beats || []).length;
+  const at = Number.parseInt(ch.at_beat, 10) || 0;
+  const options = (ch.options || []).slice().sort((a, b) => a.order - b.order || a.id - b.id);
+  return `
+<div class="se-choice-card" id="seq-choice-${ch.id}"
+  draggable="true"
+  ondragstart="seqDragStart(event, '${escHtml(sid)}', 'choice', ${ch.id})"
+  ondragend="seqDragEnd(event)">
+  <div class="se-choice-head">
+    <span class="badge badge-choice">CHOICE</span>
+    <span class="se-choice-title">${escHtml(trunc(ch.prompt || 'Elige una opcion', 80))}</span>
+    <div class="se-beat-actions">
+      <button class="se-icon-btn" title="Subir" ${at <= 0 ? 'disabled' : ''}
+              onclick="moveChoiceInSequence('${escHtml(sid)}', ${ch.id}, -1)">↑</button>
+      <button class="se-icon-btn" title="Bajar" ${at >= totalBeats ? 'disabled' : ''}
+              onclick="moveChoiceInSequence('${escHtml(sid)}', ${ch.id}, 1)">↓</button>
+      <button class="se-icon-btn se-icon-delete" title="Eliminar"
+              onclick="deleteChoiceInSequence('${escHtml(sid)}', ${ch.id})">✕</button>
+    </div>
+  </div>
+  <div class="se-choice-body">
+    <div class="se-choice-grid">
+      <input class="se-input" id="seq-choice-prompt-${ch.id}" type="text" value="${escHtml(ch.prompt || '')}" placeholder="Pregunta de la decision">
+      <button class="se-btn se-btn-save" type="button" onclick="saveChoicePromptInSequence('${escHtml(sid)}', ${ch.id})">Guardar</button>
+    </div>
+    ${options.map(opt => `
+      <div class="se-choice-option-row">
+        <input class="se-input" id="seq-opt-label-${opt.id}" type="text" value="${escHtml(opt.label || '')}" placeholder="Texto opcion">
+        <select class="se-input se-select" id="seq-opt-goto-${opt.id}">${sceneOptionsHtml(opt.goto_scene_id || opt.goto || '')}</select>
+        <button class="se-btn se-btn-save" type="button" onclick="saveChoiceOptionInSequence('${escHtml(sid)}', ${ch.id}, ${opt.id})">Guardar</button>
+        <button class="se-btn se-btn-danger" type="button" onclick="deleteChoiceOptionInSequence('${escHtml(sid)}', ${ch.id}, ${opt.id})">Eliminar</button>
+      </div>
+    `).join('')}
+    <div class="se-choice-option-row">
+      <input class="se-input" id="seq-new-opt-label-${ch.id}" type="text" value="" placeholder="Nueva opcion">
+      <select class="se-input se-select" id="seq-new-opt-goto-${ch.id}">${sceneOptionsHtml('')}</select>
+      <button class="se-btn se-btn-secondary" type="button" onclick="createChoiceOptionInSequence('${escHtml(sid)}', ${ch.id})">+ Opcion</button>
+      <span></span>
+    </div>
+  </div>
+</div>`;
+}
+
+function createStudioChoiceFromScene(sid, sceneDbId, atBeat = null) {
+  const maxBeat = (DATA.scenes[sid]?.beats || []).length;
+  const parsedAt = Number.parseInt(atBeat, 10);
+  const safeAtBeat = Number.isInteger(parsedAt) ? Math.max(0, Math.min(maxBeat, parsedAt)) : maxBeat;
+  const prompt = 'Elige una opción';
+
+  studioFetch(`/studio/api/scene/${sceneDbId}/choice/`, 'POST', { at_beat: safeAtBeat, prompt })
+    .then(data => {
+      if (!data.ok) throw new Error(data.error || 'Error desconocido');
+      const scene = DATA.scenes[sid];
+      if (scene) {
+        if (!scene.choices) scene.choices = [];
+        scene.choices.push(data.choice);
+        scene.choices.sort((a, b) => a.at_beat - b.at_beat || a.id - b.id);
+      }
+      renderAll();
+      selectNode('scene', sid);
+      studioToast('success', 'Choice creado');
+    })
+    .catch(err => studioToast('error', err.message || String(err)));
+}
+
+let _seqDragCtx = null;
+
+function seqDragStart(ev, sid, itemType, itemId) {
+  _seqDragCtx = { sid, itemType, itemId: Number(itemId) };
+  if (ev?.dataTransfer) {
+    ev.dataTransfer.effectAllowed = 'move';
+    ev.dataTransfer.setData('text/plain', `${itemType}:${itemId}`);
+  }
+  if (ev?.currentTarget) ev.currentTarget.classList.add('dragging');
+}
+
+function seqDragEnd(ev) {
+  if (ev?.currentTarget) ev.currentTarget.classList.remove('dragging');
+  document.querySelectorAll('.se-seq-insert.drag-over').forEach(el => el.classList.remove('drag-over'));
+  _seqDragCtx = null;
+}
+
+function seqDragOver(ev, sid) {
+  if (!_seqDragCtx || _seqDragCtx.sid !== sid) return;
+  ev.preventDefault();
+  if (ev?.dataTransfer) ev.dataTransfer.dropEffect = 'move';
+  const zone = ev.currentTarget;
+  if (zone) zone.classList.add('drag-over');
+}
+
+function seqDragLeave(ev) {
+  const zone = ev.currentTarget;
+  if (zone) zone.classList.remove('drag-over');
+}
+
+function seqDropAtBoundary(ev, sid, targetAtBeat) {
+  ev.preventDefault();
+  const zone = ev.currentTarget;
+  if (zone) zone.classList.remove('drag-over');
+  if (!_seqDragCtx || _seqDragCtx.sid !== sid) return;
+
+  if (_seqDragCtx.itemType === 'choice') {
+    _dropMoveChoice(sid, _seqDragCtx.itemId, targetAtBeat);
+    return;
+  }
+  if (_seqDragCtx.itemType === 'beat') {
+    _dropMoveBeat(sid, _seqDragCtx.itemId, targetAtBeat);
+  }
+}
+
+function _dropMoveChoice(sid, choiceId, targetAtBeat) {
+  const scene = DATA.scenes[sid];
+  if (!scene) return;
+  const choice = (scene.choices || []).find(ch => ch.id === choiceId);
+  if (!choice) return;
+  const maxBeat = (scene.beats || []).length;
+  const nextAt = Math.max(0, Math.min(maxBeat, Number.parseInt(targetAtBeat, 10) || 0));
+  const currentAt = Number.parseInt(choice.at_beat, 10) || 0;
+  if (nextAt === currentAt) return;
+
+  studioFetch(`/studio/api/choice/${choiceId}/`, 'PATCH', { at_beat: nextAt })
+    .then(res => {
+      if (!res.ok) throw new Error(res.error || 'Error al mover choice');
+      const idx = (scene.choices || []).findIndex(ch => ch.id === choiceId);
+      if (idx >= 0) scene.choices[idx] = res.choice;
+      scene.choices.sort((a, b) => a.at_beat - b.at_beat || a.id - b.id);
+      renderAll();
+      selectNode('scene', sid);
+    })
+    .catch(err => studioToast('error', err.message || String(err)));
+}
+
+function _dropMoveBeat(sid, beatId, targetAtBeat) {
+  const scene = DATA.scenes[sid];
+  if (!scene) return;
+  const beats = (scene.beats || []).slice().sort((a, b) => a.order - b.order);
+  const currentIdx = beats.findIndex(b => b.id === beatId);
+  if (currentIdx < 0) return;
+
+  const maxBeat = beats.length;
+  const target = Math.max(0, Math.min(maxBeat, Number.parseInt(targetAtBeat, 10) || 0));
+  let insertIdx = target;
+  if (currentIdx < insertIdx) insertIdx -= 1;
+  if (insertIdx === currentIdx) return;
+
+  const moving = beats[currentIdx];
+  beats.splice(currentIdx, 1);
+  beats.splice(insertIdx, 0, moving);
+  const newOrder = beats.map(b => b.id);
+
+  studioFetch(`/studio/api/scene/${scene.id}/beats/reorder/`, 'POST', { order: newOrder })
+    .then(res => {
+      if (!res.ok) throw new Error(res.error || 'Error al mover beat');
+      beats.forEach((b, idx) => { b.order = idx; });
+      scene.beats = beats;
+      renderAll();
+      selectNode('scene', sid);
+    })
+    .catch(err => studioToast('error', err.message || String(err)));
+}
+
+function moveChoiceInSequence(sid, choiceId, delta) {
+  const scene = DATA.scenes[sid];
+  if (!scene) return;
+  const choice = (scene.choices || []).find(ch => ch.id === choiceId);
+  if (!choice) return;
+  const maxBeat = (scene.beats || []).length;
+  const current = Number.parseInt(choice.at_beat, 10) || 0;
+  const next = Math.max(0, Math.min(maxBeat, current + delta));
+  if (next === current) return;
+
+  studioFetch(`/studio/api/choice/${choiceId}/`, 'PATCH', { at_beat: next })
+    .then(res => {
+      if (!res.ok) throw new Error(res.error || 'Error al mover choice');
+      const idx = (scene.choices || []).findIndex(ch => ch.id === choiceId);
+      if (idx >= 0) scene.choices[idx] = res.choice;
+      scene.choices.sort((a, b) => a.at_beat - b.at_beat || a.id - b.id);
+      renderAll();
+      selectNode('scene', sid);
+    })
+    .catch(err => studioToast('error', err.message || String(err)));
+}
+
+function saveChoicePromptInSequence(sid, choiceId) {
+  const promptEl = document.getElementById(`seq-choice-prompt-${choiceId}`);
+  const prompt = promptEl ? promptEl.value.trim() : '';
+  studioFetch(`/studio/api/choice/${choiceId}/`, 'PATCH', { prompt })
+    .then(res => {
+      if (!res.ok) throw new Error(res.error || 'Error al guardar choice');
+      const scene = DATA.scenes[sid];
+      if (scene && scene.choices) {
+        const idx = scene.choices.findIndex(ch => ch.id === choiceId);
+        if (idx >= 0) scene.choices[idx] = res.choice;
+      }
+      renderAll();
+      selectNode('scene', sid);
+    })
+    .catch(err => studioToast('error', err.message || String(err)));
+}
+
+function deleteChoiceInSequence(sid, choiceId) {
+  if (!confirm('Eliminar esta choice y sus opciones?')) return;
+  studioFetch(`/studio/api/choice/${choiceId}/`, 'DELETE')
+    .then(res => {
+      if (!res.ok) throw new Error(res.error || 'Error al eliminar choice');
+      const scene = DATA.scenes[sid];
+      if (scene && scene.choices) scene.choices = scene.choices.filter(ch => ch.id !== choiceId);
+      renderAll();
+      selectNode('scene', sid);
+    })
+    .catch(err => studioToast('error', err.message || String(err)));
+}
+
+function createChoiceOptionInSequence(sid, choiceId) {
+  const label = document.getElementById(`seq-new-opt-label-${choiceId}`)?.value?.trim() || '';
+  const goto_scene_id = document.getElementById(`seq-new-opt-goto-${choiceId}`)?.value?.trim() || '';
+  studioFetch(`/studio/api/choice/${choiceId}/option/`, 'POST', { label: label || 'Opcion', goto_scene_id })
+    .then(res => {
+      if (!res.ok) throw new Error(res.error || 'Error al crear opcion');
+      const scene = DATA.scenes[sid];
+      const choice = (scene?.choices || []).find(ch => ch.id === choiceId);
+      if (choice) {
+        if (!choice.options) choice.options = [];
+        choice.options.push(res.option);
+        choice.options.sort((a, b) => a.order - b.order || a.id - b.id);
+      }
+      renderAll();
+      selectNode('scene', sid);
+    })
+    .catch(err => studioToast('error', err.message || String(err)));
+}
+
+function saveChoiceOptionInSequence(sid, choiceId, optionId) {
+  const label = document.getElementById(`seq-opt-label-${optionId}`)?.value?.trim() || '';
+  const goto_scene_id = document.getElementById(`seq-opt-goto-${optionId}`)?.value?.trim() || '';
+  studioFetch(`/studio/api/choice-option/${optionId}/`, 'PATCH', { label, goto_scene_id })
+    .then(res => {
+      if (!res.ok) throw new Error(res.error || 'Error al guardar opcion');
+      const scene = DATA.scenes[sid];
+      const choice = (scene?.choices || []).find(ch => ch.id === choiceId);
+      if (choice && choice.options) {
+        const idx = choice.options.findIndex(opt => opt.id === optionId);
+        if (idx >= 0) choice.options[idx] = res.option;
+      }
+      renderAll();
+      selectNode('scene', sid);
+    })
+    .catch(err => studioToast('error', err.message || String(err)));
+}
+
+function deleteChoiceOptionInSequence(sid, choiceId, optionId) {
+  if (!confirm('Eliminar esta opcion?')) return;
+  studioFetch(`/studio/api/choice-option/${optionId}/`, 'DELETE')
+    .then(res => {
+      if (!res.ok) throw new Error(res.error || 'Error al eliminar opcion');
+      const scene = DATA.scenes[sid];
+      const choice = (scene?.choices || []).find(ch => ch.id === choiceId);
+      if (choice && choice.options) choice.options = choice.options.filter(opt => opt.id !== optionId);
+      renderAll();
+      selectNode('scene', sid);
+    })
+    .catch(err => studioToast('error', err.message || String(err)));
+}
+
+// ============================================================
+// BEATS — render + CRUD
+// ============================================================
+
+const BEAT_KINDS = [
+  { kind: '', label: 'Diálogo', icon: '🗣' },
+  { kind: 'narration', label: 'Narración', icon: '📖' },
+  { kind: 'vignette', label: 'Viñeta', icon: '🎬' },
+  { kind: 'input', label: 'Dato del jugador', icon: '⌨' },
+  { kind: 'tool-search', label: 'Búsqueda', icon: '🔍' },
+  { kind: 'wa', label: 'WhatsApp', icon: '💬' },
+  { kind: 'sfx', label: 'Efecto sonoro', icon: '🔊' },
+  { kind: 'ambient', label: 'Música (inicio/cambio/stop)', icon: '🌧' },
+  { kind: 'dispatch', label: 'Dispatch', icon: '📡' },
+];
+
+function renderEditableBeats(sid, beats) {
+  if (!beats.length) {
+    return '<div class="se-no-beats">Sin beats. Usa "+ Agregar beat" para comenzar.</div>';
+  }
+  return beats
+    .slice()
+    .sort((a, b) => a.order - b.order)
+    .map((b, idx, arr) => renderBeatCard(sid, b, idx, arr.length))
+    .join('');
+}
+
+function renderBeatCard(sid, beat, idx, total) {
+  // The story-map context sends 'dialogue' for kind=''; normalize back.
+  const kind  = (beat.kind === 'dialogue' || !beat.kind) ? '' : beat.kind;
+  const label = BEAT_KINDS.find(k => k.kind === kind)?.label ?? kind;
+  const icon  = BEAT_KINDS.find(k => k.kind === kind)?.icon ?? '•';
+  const summary = beatCardSummary(beat);
+
+  return `
+<div class="se-beat-card" id="bc-${beat.id}" data-beat-id="${beat.id}" data-sid="${escHtml(sid)}"
+  draggable="true"
+  ondragstart="seqDragStart(event, '${escHtml(sid)}', 'beat', ${beat.id})"
+  ondragend="seqDragEnd(event)">
+  <div class="se-beat-head">
+    <span class="se-beat-order">${beat.order}</span>
+    <span class="se-beat-icon">${icon}</span>
+    <span class="se-beat-kind">${escHtml(label)}</span>
+    <span class="se-beat-summary">${summary}</span>
+    <div class="se-beat-actions">
+      <button class="se-icon-btn" title="Subir" ${idx === 0 ? 'disabled' : ''}
+              onclick="moveBeat('${escHtml(sid)}', ${beat.id}, -1)">↑</button>
+      <button class="se-icon-btn" title="Bajar" ${idx === total - 1 ? 'disabled' : ''}
+              onclick="moveBeat('${escHtml(sid)}', ${beat.id}, 1)">↓</button>
+          <button class="se-icon-btn se-icon-transfer" title="Mover/copiar a otra escena"
+            onclick="openBeatTransferModal('${escHtml(sid)}', ${beat.id})">⇄</button>
+      <button class="se-icon-btn" title="Expandir/colapsar"
+              onclick="toggleBeatExpand(${beat.id})">✎</button>
+      <button class="se-icon-btn se-icon-delete" title="Eliminar"
+              onclick="deleteBeat('${escHtml(sid)}', ${beat.id})">✕</button>
+    </div>
+  </div>
+  <div class="se-beat-body" id="bb-${beat.id}" style="display:none">
+    ${renderBeatFields(beat, sid)}
+    <div class="se-beat-save-row">
+      <button class="se-btn se-btn-save" onclick="saveBeat('${escHtml(sid)}', ${beat.id})">
+        Guardar beat
+      </button>
+      <span id="bs-status-${beat.id}" class="se-status"></span>
+    </div>
+  </div>
+</div>`;
+}
+
+function beatCardSummary(beat) {
+  const kind = (beat.kind === 'dialogue' || !beat.kind) ? '' : beat.kind;
+  if (kind === '') return escHtml(trunc(`${beat.speaker ? beat.speaker + ': ' : ''}${beat.text}`, 60));
+  if (kind === 'narration') return escHtml(trunc(beat.text, 60));
+  if (kind === 'vignette') return escHtml(`${beat.vignette_action || 'legacy'}: ${beat.vignette_ref || '—'}`);
+  if (kind === 'input') return escHtml(beat.input_field || '—');
+  if (kind === 'tool-search') return escHtml(beat.tool_ref || '—');
+  if (kind === 'wa') return escHtml(`${beat.wa_contact || 'dani'}: ${trunc(beat.text, 40)}`);
+  if (kind === 'sfx') {
+    const action = beat.sfx_action || 'play';
+    if (action === 'stop') return 'detener SFX';
+    if (action === 'replace') return escHtml(`reemplazar con ${beat.sfx_key || '—'}`);
+    return escHtml(beat.sfx_key || '—');
+  }
+  if (kind === 'ambient') return beat.ambient_stop ? 'detener música' : escHtml(beat.ambient_key || '—');
+  if (kind === 'dispatch') return 'dispatch';
+  return '';
+}
+
+function _findCaseByPk(casePk) {
+  return (DATA.cases || []).find(c => c.id === casePk) || null;
+}
+
+function _findCaseByFieldFk(fieldFk) {
+  if (!fieldFk) return null;
+  const fk = parseInt(fieldFk, 10);
+  for (const c of (DATA.cases || [])) {
+    if ((c.fields || []).some(f => f.id === fk)) return c;
+  }
+  return null;
+}
+
+function _resolveInputCasePk(beat, sid) {
+  const fromField = _findCaseByFieldFk(beat.input_case_field_fk);
+  if (fromField) return fromField.id;
+  const scene = DATA.scenes[sid];
+  if (scene && scene.case_pk) return scene.case_pk;
+  return (DATA.cases && DATA.cases.length) ? DATA.cases[0].id : null;
+}
+
+function _fieldsForCasePk(casePk) {
+  return _findCaseByPk(casePk)?.fields || [];
+}
+
+function _syncInputFieldTextFromSelect(beatId) {
+  const sel = document.getElementById(`bf-ifield-fk-${beatId}`);
+  const text = document.getElementById(`bf-ifield-${beatId}`);
+  if (!sel || !text) return;
+  const opt = sel.options[sel.selectedIndex];
+  if (opt && opt.dataset && opt.dataset.fieldId) text.value = opt.dataset.fieldId;
+}
+
+function _slugifyFieldId(raw) {
+  const base = String(raw || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  return base || 'dato_jugador';
+}
+
+function _suggestInputFieldId(beatId) {
+  const dataName = document.getElementById(`bf-idataname-${beatId}`)?.value || '';
+  const hint = document.getElementById(`bf-ihint-${beatId}`)?.value || '';
+  return _slugifyFieldId(dataName || hint);
+}
+
+function refreshInputFieldSelect(beatId, sid, preserveSelection) {
+  const caseEl = document.getElementById(`bf-icase-${beatId}`);
+  const sel = document.getElementById(`bf-ifield-fk-${beatId}`);
+  if (!caseEl || !sel) return;
+  const prev = preserveSelection ? sel.value : '';
+  const casePk = parseInt(caseEl.value || '0', 10) || null;
+  const fields = _fieldsForCasePk(casePk);
+  sel.innerHTML = '<option value="">— seleccionar campo existente —</option>'
+    + fields.map(f => `<option value="${f.id}" data-field-id="${escHtml(f.field_id)}">${escHtml(f.field_id)} · ${escHtml(f.fact_path)}</option>`).join('');
+  if (prev && fields.some(f => String(f.id) === String(prev))) {
+    sel.value = prev;
+  }
+  _syncInputFieldTextFromSelect(beatId);
+}
+
+function refreshInputBindingWarnings() {
+  const validFields = new Set();
+  for (const c of (DATA.cases || [])) {
+    for (const f of (c.fields || [])) validFields.add(f.field_id);
+  }
+  DATA.warnings = (DATA.warnings || []).filter(w => w.type !== 'input_no_field');
+  for (const [sid, s] of Object.entries(DATA.scenes || {})) {
+    for (const b of (s.beats || [])) {
+      const kind = (b.kind === 'dialogue' || !b.kind) ? '' : b.kind;
+      if (kind !== 'input') continue;
+      const fid = (b.input_field || '').trim();
+      if (fid && !validFields.has(fid)) {
+        DATA.warnings.push({
+          type: 'input_no_field',
+          scene: sid,
+          detail: `Input beat referencia campo "${fid}" inexistente en ningún Case`,
+          admin_url: s.admin_url || '#',
+          severity: 'error',
+        });
+      }
+    }
+  }
+}
+
+function createAndBindCaseField(beatId, sid) {
+  const caseEl = document.getElementById(`bf-icase-${beatId}`);
+  const fieldEl = document.getElementById(`bf-inewfield-${beatId}`);
+  const pathEl = document.getElementById(`bf-inewpath-${beatId}`);
+  const labelEl = document.getElementById(`bf-inewlabel-${beatId}`);
+  const casePk = parseInt(caseEl?.value || '0', 10) || null;
+  const fieldId = (fieldEl?.value || '').trim();
+  if (!casePk) { studioToast('warning', 'Selecciona un Case para crear el campo'); return; }
+  if (!fieldId) { studioToast('warning', 'Ingresa field_id para crear el campo'); return; }
+
+  const payload = {
+    field_id: fieldId,
+    fact_path: (pathEl?.value || '').trim(),
+    notification_label: (labelEl?.value || '').trim(),
+  };
+
+  studioFetch(`/studio/api/case/${casePk}/field/`, 'POST', payload)
+  .then(res => {
+    if (!res.ok) throw new Error(res.error || 'Error creando campo');
+    const c = _findCaseByPk(casePk);
+    if (c) {
+      c.fields = c.fields || [];
+      c.fields.push(res.field);
+      c.fields.sort((a, b) => String(a.field_id).localeCompare(String(b.field_id)));
+    }
+    refreshInputFieldSelect(beatId, sid, false);
+    const fkSel = document.getElementById(`bf-ifield-fk-${beatId}`);
+    if (fkSel) fkSel.value = String(res.field.id);
+    _syncInputFieldTextFromSelect(beatId);
+    if (fieldEl) fieldEl.value = '';
+    studioToast('success', `Campo ${res.field.field_id} creado y asociado al beat (falta Guardar beat)`);
+  })
+  .catch(err => studioToast('error', err.message));
+}
+
+function renderBeatFields(beat, sid) {
+  const kind = (beat.kind === 'dialogue' || !beat.kind) ? '' : beat.kind;
+  const textArea = (id, val, label, rows) =>
+    `<div class="se-field-row">
+       <label class="se-label">${label}</label>
+       <textarea class="se-input se-textarea" id="${id}" rows="${rows || 2}">${escHtml(val || '')}</textarea>
+     </div>`;
+  const inputField = (id, val, label, type) =>
+    `<div class="se-field-row">
+       <label class="se-label">${label}</label>
+       <input class="se-input" id="${id}" type="${type || 'text'}" value="${escHtml(val || '')}">
+     </div>`;
+  const audioSelect = (id, val, type, label) => {
+    const assets = (DATA.assets?.audio || []).filter(a => a.asset_type === type);
+    return `<div class="se-field-row">
+      <label class="se-label">${label}</label>
+      <select class="se-input se-select" id="${id}">
+        <option value="" ${!val ? 'selected' : ''}>${assets.length ? 'Elegir audio' : 'Sin audios cargados'}</option>
+        ${assets.map(a => `<option value="${escHtml(a.key)}" ${a.key === val ? 'selected' : ''}>${escHtml(a.key)}</option>`).join('')}
+      </select>
+      ${assets.length ? '' : '<div class="se-help">No hay assets de este tipo en el proyecto.</div>'}
+    </div>`;
+  };
+
+  let html = `
+    <div class="se-field-row">
+      <label class="se-label">Tipo</label>
+            <select class="se-input se-select" id="bf-kind-${beat.id}"
+              onchange="onBeatKindChange('${escHtml(sid)}', ${beat.id}, this.value)">
+        ${BEAT_KINDS.map(k =>
+          `<option value="${k.kind}" ${k.kind === kind ? 'selected' : ''}>${k.icon} ${k.label}</option>`
+        ).join('')}
+      </select>
+    </div>`;
+
+  // ── Kind-specific fields ──
+  if (kind === '') {  // dialogue
+    html += inputField(`bf-speaker-${beat.id}`, beat.speaker, 'Speaker');
+    html += textArea(`bf-text-${beat.id}`, beat.text, 'Texto', 3);
+  } else if (kind === 'narration') {
+    html += textArea(`bf-text-${beat.id}`, beat.text, 'Texto', 3);
+  } else if (kind === 'vignette') {
+    const previewUrl = vignetteImageUrlByRef(beat.vignette_ref || '');
+    html += `
+    <div class="se-field-row">
+      <label class="se-label">Acción</label>
+      <select class="se-input se-select" id="bf-vaction-${beat.id}">
+        <option value="" ${!beat.vignette_action ? 'selected' : ''}>legacy (auto-close)</option>
+        <option value="open"   ${beat.vignette_action === 'open'   ? 'selected' : ''}>open — abrir plano</option>
+        <option value="text"   ${beat.vignette_action === 'text'   ? 'selected' : ''}>text — actualizar texto</option>
+        <option value="change" ${beat.vignette_action === 'change' ? 'selected' : ''}>change — cambiar plano</option>
+        <option value="close"  ${beat.vignette_action === 'close'  ? 'selected' : ''}>close — cerrar viñeta</option>
+      </select>
+    </div>
+    <div class="se-field-row">
+      <label class="se-label">Viñeta</label>
+      <div class="se-vig-pick-row">
+        <input class="se-input" id="bf-vref-${beat.id}" type="text"
+               value="${escHtml(beat.vignette_ref || '')}" placeholder="vignette_id…"
+               style="flex:1">
+        <input type="hidden" id="bf-vfk-${beat.id}" value="${beat.vignette_fk || ''}">
+        <button class="se-btn se-btn-pick" type="button"
+                onclick="openVigPicker(${beat.id})">🖼 Elegir</button>
+      </div>
+      <div class="se-vig-preview" id="vp-${beat.id}" style="${beat.vignette_ref ? '' : 'display:none'}">
+        ${previewUrl
+          ? `<img src="${escHtml(previewUrl)}" onerror="this.style.display='none'"
+               style="max-height:60px;border-radius:4px;object-fit:cover;">`
+          : `<span style="font-size:18px;">🖼</span>`}
+        <span class="se-vig-label">${escHtml(beat.vignette_ref || '')}</span>
+      </div>
+    </div>`;
+    html += textArea(`bf-text-${beat.id}`, beat.text, 'Texto/Subtítulo', 2);
+  } else if (kind === 'input') {
+    const casePk = _resolveInputCasePk(beat, sid);
+    const fields = _fieldsForCasePk(casePk);
+    const selectedFk = beat.input_case_field_fk ? String(beat.input_case_field_fk) : '';
+    const guessedDataName = beat.input_field || '';
+    html += `
+    <div class="se-field-row">
+      <label class="se-label">Case</label>
+      <select class="se-input se-select" id="bf-icase-${beat.id}" onchange="refreshInputFieldSelect(${beat.id}, '${escHtml(sid)}', false)">
+        ${(DATA.cases || []).map(c => `<option value="${c.id}" ${String(c.id) === String(casePk) ? 'selected' : ''}>${escHtml(c.case_id)} — ${escHtml(c.title || '')}</option>`).join('')}
+      </select>
+      <div class="se-help">Se usará este case para guardar el dato capturado.</div>
+    </div>
+
+    <div class="se-field-row" style="border:1px solid #1b2e54; border-radius:8px; padding:8px; background:#0b1730; margin-top:8px;">
+      <label class="se-label">1) Validación de respuesta</label>
+      ${textArea(`bf-ihint-${beat.id}`, beat.input_hint, 'Pregunta al jugador', 2)}
+      ${inputField(`bf-ianswer-${beat.id}`, beat.input_answer, 'Respuesta esperada (exacta)')}
+    </div>
+
+    <div class="se-field-row" style="border:1px solid #1b2e54; border-radius:8px; padding:8px; background:#0b1730; margin-top:8px;">
+      <label class="se-label">2) Dato que se guarda</label>
+      ${inputField(`bf-idataname-${beat.id}`, guessedDataName, 'Nombre del dato (ej: patente, color, dirección)')}
+      <label class="se-label">Usar dato existente (opcional)</label>
+      <select class="se-input se-select" id="bf-ifield-fk-${beat.id}" onchange="_syncInputFieldTextFromSelect(${beat.id})">
+        <option value="">— crear automáticamente desde el nombre del dato —</option>
+        ${fields.map(f => `<option value="${f.id}" data-field-id="${escHtml(f.field_id)}" ${String(f.id) === selectedFk ? 'selected' : ''}>${escHtml(f.field_id)} · ${escHtml(f.fact_path)}</option>`).join('')}
+      </select>
+      ${inputField(`bf-inewlabel-${beat.id}`, '', 'Etiqueta de notificación (opcional)')}
+      <div class="se-help">Studio creará y asociará el campo interno si no seleccionas uno existente.</div>
+    </div>
+
+    <div class="se-field-row" style="border:1px solid #1b2e54; border-radius:8px; padding:8px; background:#0b1730; margin-top:8px;">
+      <label class="se-label">3) Feedback al jugador</label>
+      ${inputField(`bf-ierrmsg-${beat.id}`, beat.input_error_msg, 'Mensaje si la respuesta es incorrecta')}
+    </div>
+
+    <details style="margin-top:8px; border:1px dashed #1b2e54; border-radius:6px; padding:6px;">
+      <summary style="cursor:pointer; color:#94a3b8; font-size:11px;">Opciones avanzadas</summary>
+      ${inputField(`bf-isetval-${beat.id}`, beat.input_set_value, 'Valor a guardar (si vacío, usa la respuesta esperada)')}
+      ${inputField(`bf-ifield-${beat.id}`, beat.input_field, 'ID técnico del campo', 'hidden')}
+    </details>`;
+  } else if (kind === 'tool-search') {
+    html += inputField(`bf-tool-${beat.id}`, beat.tool_ref, 'Tool search_id');
+  } else if (kind === 'wa') {
+    html += inputField(`bf-wacontact-${beat.id}`, beat.wa_contact, 'Contacto (wa_contact)');
+    html += inputField(`bf-speaker-${beat.id}`, beat.speaker, 'Speaker');
+    html += textArea(`bf-text-${beat.id}`, beat.text, 'Texto', 2);
+    html += `
+    <div class="se-field-row">
+      <label class="se-label">Media type</label>
+      <select class="se-input se-select" id="bf-mediatype-${beat.id}">
+        <option value="" ${!beat.media_type ? 'selected' : ''}>— ninguno —</option>
+        <option value="image"  ${beat.media_type === 'image'  ? 'selected' : ''}>image</option>
+        <option value="voice"  ${beat.media_type === 'voice'  ? 'selected' : ''}>voice</option>
+        <option value="file"   ${beat.media_type === 'file'   ? 'selected' : ''}>file</option>
+      </select>
+    </div>`;
+    html += inputField(`bf-mediaurl-${beat.id}`, beat.media_url, 'URL/path del media');
+    html += inputField(`bf-mediacap-${beat.id}`, beat.media_caption, 'Caption');
+    html += inputField(`bf-medianame-${beat.id}`, beat.media_name, 'Nombre archivo');
+    html += inputField(`bf-mediadur-${beat.id}`, beat.media_duration, 'Duración (ej: 0:12)');
+  } else if (kind === 'sfx') {
+    const sfxAction = beat.sfx_action || 'play';
+    html += `
+    <div class="se-field-row">
+      <label class="se-label">Acción SFX</label>
+      <select class="se-input se-select" id="bf-sfxaction-${beat.id}">
+        <option value="play" ${sfxAction === 'play' ? 'selected' : ''}>Iniciar / superponer</option>
+        <option value="replace" ${sfxAction === 'replace' ? 'selected' : ''}>Reemplazar sonido activo</option>
+        <option value="stop" ${sfxAction === 'stop' ? 'selected' : ''}>Detener SFX activos</option>
+      </select>
+      <div class="se-help">Usa “reemplazar” para cortar cualquier SFX que siga sonando antes de lanzar el nuevo.</div>
+    </div>`;
+    html += audioSelect(`bf-sfxkey-${beat.id}`, beat.sfx_key, 'sfx', 'Efecto sonoro');
+  } else if (kind === 'ambient') {
+    html += audioSelect(`bf-ambkey-${beat.id}`, beat.ambient_key, 'music', 'Música');
+    html += `
+    <div class="se-field-row">
+      <label class="se-label">Acción musical</label>
+      <label style="display:flex;align-items:center;gap:8px;color:#cdd6f4;font-size:12px;">
+        <input type="checkbox" id="bf-ambstop-${beat.id}" ${beat.ambient_stop ? 'checked' : ''}>
+        Detener la música actual en este punto (ignora clave seleccionada)
+      </label>
+      <div class="se-help">Para música inicial del caso, agrega este beat al inicio de la escena inicial.</div>
+    </div>`;
+  } else if (kind === 'dispatch') {
+    html += '<div class="se-no-beats" style="padding:8px 0;">Sin campos adicionales para dispatch.</div>';
+  }
+
+  return html;
+}
+
+function toggleBeatExpand(beatId) {
+  const body = document.getElementById(`bb-${beatId}`);
+  if (body) body.style.display = body.style.display === 'none' ? 'block' : 'none';
+}
+
+function onBeatKindChange(sid, beatId, newKind) {
+  // Re-render just the fields portion after kind selector
+  const body = document.getElementById(`bb-${beatId}`);
+  if (!body) return;
+  // Build a temporary beat object with the new kind to render its fields
+  const tmpBeat = { id: beatId, kind: newKind, text: '', speaker: '', vignette_action: '',
+                    vignette_ref: '', vignette_fk: null, input_field: '', input_set_value: '',
+                    input_answer: '', input_hint: '', input_error_msg: '', input_case_field_fk: null,
+                    tool_ref: '', wa_contact: '', media_type: '',
+                    media_url: '', media_caption: '', media_name: '', media_duration: '',
+                    sfx_key: '', sfx_action: 'play', ambient_key: '', ambient_stop: false };
+  const saveRow = body.querySelector('.se-beat-save-row');
+  // Remove existing kind-specific nodes (keep only the first .se-field-row for kind selector)
+  const kindRow = body.querySelector('.se-field-row');
+  // Clear everything except the kind row and save row, re-insert generated fields
+  body.innerHTML = '';
+  // Re-render all fields (kind selector + kind-specific)
+  const tmpDiv = document.createElement('div');
+  tmpDiv.innerHTML = renderBeatFields(tmpBeat, sid);
+  body.appendChild(tmpDiv);
+  body.appendChild(saveRow);
+}
+
+function collectBeatData(beatId) {
+  const get = id => document.getElementById(id)?.value ?? '';
+  const kindEl = document.getElementById(`bf-kind-${beatId}`);
+  // '' is the API value for dialogue beats
+  const kind = kindEl ? kindEl.value : '';
+
+  const data = { kind };
+  if (kind === '' || kind === 'narration') {
+    data.text    = get(`bf-text-${beatId}`);
+    data.speaker = get(`bf-speaker-${beatId}`);
+  } else if (kind === 'vignette') {
+    data.vignette_action = get(`bf-vaction-${beatId}`);
+    data.vignette_ref    = get(`bf-vref-${beatId}`);
+    data.vignette_fk     = get(`bf-vfk-${beatId}`) || null;
+    data.text            = get(`bf-text-${beatId}`);
+  } else if (kind === 'input') {
+    data.input_case_field_fk = get(`bf-ifield-fk-${beatId}`) || null;
+    data.input_field     = get(`bf-ifield-${beatId}`) || get(`bf-idataname-${beatId}`);
+    data.input_set_value = get(`bf-isetval-${beatId}`);
+    data.input_answer    = get(`bf-ianswer-${beatId}`);
+    data.input_hint      = get(`bf-ihint-${beatId}`);
+    data.input_error_msg = get(`bf-ierrmsg-${beatId}`);
+  } else if (kind === 'tool-search') {
+    data.tool_ref = get(`bf-tool-${beatId}`);
+  } else if (kind === 'wa') {
+    data.wa_contact   = get(`bf-wacontact-${beatId}`);
+    data.speaker      = get(`bf-speaker-${beatId}`);
+    data.text         = get(`bf-text-${beatId}`);
+    data.media_type   = get(`bf-mediatype-${beatId}`);
+    data.media_url    = get(`bf-mediaurl-${beatId}`);
+    data.media_caption= get(`bf-mediacap-${beatId}`);
+    data.media_name   = get(`bf-medianame-${beatId}`);
+    data.media_duration = get(`bf-mediadur-${beatId}`);
+  } else if (kind === 'sfx') {
+    data.sfx_action = get(`bf-sfxaction-${beatId}`) || 'play';
+    data.sfx_key = data.sfx_action === 'stop' ? '' : get(`bf-sfxkey-${beatId}`);
+  } else if (kind === 'ambient') {
+    data.ambient_key  = get(`bf-ambkey-${beatId}`);
+    data.ambient_stop = !!(document.getElementById(`bf-ambstop-${beatId}`)?.checked);
+    if (data.ambient_stop) data.ambient_key = '';
+  }
+  return data;
+}
+
+function ensureInputBindingBeforeSave(beatId, sid, data) {
+  if (data.kind !== 'input') return Promise.resolve(data);
+
+  const casePk = parseInt(document.getElementById(`bf-icase-${beatId}`)?.value || '0', 10) || null;
+  const selectedFk = String(document.getElementById(`bf-ifield-fk-${beatId}`)?.value || '').trim();
+  const dataNameRaw = (document.getElementById(`bf-idataname-${beatId}`)?.value || '').trim();
+  const notifLabel = (document.getElementById(`bf-inewlabel-${beatId}`)?.value || '').trim();
+
+  if (!data.input_hint?.trim()) return Promise.reject(new Error('Define primero la pregunta al jugador'));
+  if (!data.input_answer?.trim()) return Promise.reject(new Error('Define la respuesta esperada'));
+
+  if (selectedFk) {
+    const sel = document.getElementById(`bf-ifield-fk-${beatId}`);
+    const opt = sel?.options?.[sel.selectedIndex];
+    data.input_case_field_fk = selectedFk;
+    data.input_field = (opt?.dataset?.fieldId || data.input_field || '').trim();
+  }
+
+  if (!data.input_case_field_fk) {
+    if (!casePk) return Promise.reject(new Error('Selecciona un Case para guardar el dato'));
+    const fieldId = _slugifyFieldId(dataNameRaw || _suggestInputFieldId(beatId));
+    if (!fieldId) return Promise.reject(new Error('Define el nombre del dato a guardar'));
+
+    return studioFetch(`/studio/api/case/${casePk}/field/`, 'POST', {
+      field_id: fieldId,
+      notification_label: notifLabel,
+    }).then(res => {
+      if (!res.ok) throw new Error(res.error || 'No se pudo crear el campo interno');
+      const c = _findCaseByPk(casePk);
+      if (c) {
+        c.fields = c.fields || [];
+        c.fields.push(res.field);
+        c.fields.sort((a, b) => String(a.field_id).localeCompare(String(b.field_id)));
+      }
+      data.input_case_field_fk = res.field.id;
+      data.input_field = res.field.field_id;
+      const hiddenField = document.getElementById(`bf-ifield-${beatId}`);
+      if (hiddenField) hiddenField.value = res.field.field_id;
+      return data;
+    }).catch(err => {
+      const msg = String(err?.message || err);
+      if (!/ya existe/i.test(msg)) throw err;
+      // If field already exists in the Case, bind it automatically.
+      const c = _findCaseByPk(casePk);
+      const existing = (c?.fields || []).find(f => String(f.field_id) === String(fieldId));
+      if (!existing) throw err;
+      data.input_case_field_fk = existing.id;
+      data.input_field = existing.field_id;
+      return data;
+    });
+  }
+
+  if (!data.input_set_value?.trim()) {
+    data.input_set_value = (data.input_answer || '').trim();
+  }
+
+  if (!data.input_field?.trim()) {
+    data.input_field = _slugifyFieldId(dataNameRaw || data.input_answer || 'dato_jugador');
+  }
+
+  return Promise.resolve(data);
+}
+
+function saveBeat(sid, beatId) {
+  const data = collectBeatData(beatId);
+  const statusEl = document.getElementById(`bs-status-${beatId}`);
+  const btn = document.querySelector(`#bc-${beatId} .se-btn-save`);
+  if (btn) { btn.disabled = true; btn.textContent = 'Guardando…'; }
+
+  ensureInputBindingBeforeSave(beatId, sid, data)
+  .then(finalData => studioFetch(`/studio/api/beat/${beatId}/`, 'PATCH', finalData))
+  .then(res => {
+    if (!res.ok) throw new Error(res.error || 'Error desconocido');
+    // Update in-memory DATA
+    const scene = DATA.scenes[sid];
+    if (scene) {
+      const idx = scene.beats.findIndex(b => b.id === beatId);
+      if (idx !== -1) Object.assign(scene.beats[idx], res.beat, { kind: res.beat.kind || '' });
+    }
+    refreshInputBindingWarnings();
+    if (statusEl) { statusEl.textContent = '✓'; statusEl.className = 'se-status ok'; }
+    // Refresh card summary
+    const head = document.querySelector(`#bc-${beatId} .se-beat-summary`);
+    if (head && scene) {
+      const b = scene.beats.find(b => b.id === beatId);
+      if (b) head.innerHTML = beatCardSummary(b);
+    }
+    renderAll();
+    setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 2000);
+  })
+  .catch(err => {
+    studioToast('error', `Error al guardar beat: ${err.message}`);
+  })
+  .finally(() => { if (btn) { btn.disabled = false; btn.textContent = 'Guardar beat'; } });
+}
+
+function deleteBeat(sid, beatId) {
+  if (!confirm('¿Eliminar este beat?')) return;
+
+  studioFetch(`/studio/api/beat/${beatId}/`, 'DELETE')
+  .then(res => {
+    if (!res.ok) throw new Error(res.error || 'Error desconocido');
+    // Remove from DATA
+    const scene = DATA.scenes[sid];
+    if (scene) scene.beats = scene.beats.filter(b => b.id !== beatId);
+    renderAll();
+    selectNode('scene', sid);
+  })
+  .catch(err => studioToast('error', `Error al eliminar: ${err.message}`));
+}
+
+function reindexBeatCards(sid) {
+  const scene = DATA.scenes[sid];
+  if (!scene) return;
+  const container = document.getElementById(`se-beats-${sid}`);
+  if (!container) return;
+  const sorted = scene.beats.slice().sort((a, b) => a.order - b.order);
+  const total  = sorted.length;
+  sorted.forEach((b, idx) => {
+    const card = document.getElementById(`bc-${b.id}`);
+    if (!card) return;
+    const orderEl = card.querySelector('.se-beat-order');
+    if (orderEl) orderEl.textContent = b.order;
+    const upBtn  = card.querySelectorAll('.se-icon-btn')[0];
+    const dnBtn  = card.querySelectorAll('.se-icon-btn')[1];
+    if (upBtn) upBtn.disabled = idx === 0;
+    if (dnBtn) dnBtn.disabled = idx === total - 1;
+  });
+}
+
+function moveBeat(sid, beatId, dir) {
+  const scene = DATA.scenes[sid];
+  if (!scene) return;
+  const sorted = scene.beats.slice().sort((a, b) => a.order - b.order);
+  const idx = sorted.findIndex(b => b.id === beatId);
+  const swapIdx = idx + dir;
+  if (swapIdx < 0 || swapIdx >= sorted.length) return;
+
+  // Swap orders in memory
+  const tmp = sorted[idx].order;
+  sorted[idx].order   = sorted[swapIdx].order;
+  sorted[swapIdx].order = tmp;
+
+  const newOrder = sorted.slice().sort((a, b) => a.order - b.order).map(b => b.id);
+
+  studioFetch(`/studio/api/scene/${scene.id}/beats/reorder/`, 'POST', { order: newOrder })
+  .then(res => {
+    if (!res.ok) throw new Error(res.error || 'Error');
+    renderAll();
+    selectNode('scene', sid);
+  })
+  .catch(err => studioToast('error', `Error al reordenar: ${err.message}`));
+}
+
+// ── Move/copy beat between scenes ──
+let _beatTransferContext = null;
+
+function _normalizedBeats(beats) {
+  return (beats || []).map(b => ({ ...b, kind: b.kind || '' }));
+}
+
+function openBeatTransferModal(sourceSid, beatId) {
+  const sourceScene = DATA.scenes[sourceSid];
+  if (!sourceScene) {
+    studioToast('error', 'Escena origen no encontrada');
+    return;
+  }
+  const beat = (sourceScene.beats || []).find(b => b.id === beatId);
+  if (!beat) {
+    studioToast('error', 'Beat no encontrado');
+    return;
+  }
+
+  const select = document.getElementById('bt-target-scene');
+  const sub = document.getElementById('beat-transfer-sub');
+  const backdrop = document.getElementById('beat-transfer-backdrop');
+  const modal = document.getElementById('beat-transfer-modal');
+  if (!select || !sub || !backdrop || !modal) return;
+
+  const sceneIds = Object.keys(DATA.scenes || {}).sort((a, b) => a.localeCompare(b));
+  const destIds = sceneIds.filter(id => id !== sourceSid);
+  if (!destIds.length) {
+    studioToast('warning', 'No hay otra escena destino disponible');
+    return;
+  }
+
+  select.innerHTML = destIds.map(id => {
+    const title = DATA.scenes[id]?.title || id;
+    return `<option value="${escHtml(id)}">${escHtml(id)} — ${escHtml(title)}</option>`;
+  }).join('');
+
+  document.querySelectorAll('input[name="bt-mode"]').forEach(el => {
+    el.checked = el.value === 'move';
+  });
+
+  sub.textContent = `Beat #${beatId} desde ${sourceSid}`;
+  _beatTransferContext = { sourceSid, beatId };
+  backdrop.style.display = 'block';
+  modal.style.display = 'block';
+}
+
+function closeBeatTransferModal() {
+  const backdrop = document.getElementById('beat-transfer-backdrop');
+  const modal = document.getElementById('beat-transfer-modal');
+  if (backdrop) backdrop.style.display = 'none';
+  if (modal) modal.style.display = 'none';
+  _beatTransferContext = null;
+}
+
+function confirmBeatTransfer() {
+  if (!_beatTransferContext) return;
+  const { sourceSid, beatId } = _beatTransferContext;
+  const select = document.getElementById('bt-target-scene');
+  const btn = document.getElementById('bt-confirm-btn');
+  const mode = document.querySelector('input[name="bt-mode"]:checked')?.value || 'move';
+  const targetSid = (select?.value || '').trim();
+
+  if (!targetSid) {
+    studioToast('warning', 'Selecciona una escena destino');
+    return;
+  }
+  if (btn) { btn.disabled = true; btn.textContent = 'Aplicando…'; }
+
+  studioFetch(`/studio/api/beat/${beatId}/transfer/`, 'POST', {
+    target_scene_id: targetSid,
+    mode,
+  })
+  .then(res => {
+    if (!res.ok) throw new Error(res.error || 'No se pudo transferir beat');
+
+    const srcId = res.source_scene_id;
+    const dstId = res.target_scene_id;
+    if (DATA.scenes[srcId]) DATA.scenes[srcId].beats = _normalizedBeats(res.source_beats);
+    if (DATA.scenes[dstId]) DATA.scenes[dstId].beats = _normalizedBeats(res.target_beats);
+
+    renderAll();
+    if (selectedNodeType === 'scene' && (selectedNodeId === srcId || selectedNodeId === dstId)) {
+      selectNode('scene', selectedNodeId);
+    }
+    closeBeatTransferModal();
+    studioToast('success', mode === 'copy' ? 'Beat copiado' : 'Beat movido');
+  })
+  .catch(err => {
+    studioToast('error', `Error al transferir beat: ${err.message}`);
+  })
+  .finally(() => {
+    if (btn) { btn.disabled = false; btn.textContent = 'Aplicar'; }
+  });
+}
+
+// ── Add beat ──
+let _addBeatContext = null;
+
+function openAddBeatMenu(sid, sceneDbId) {
+  _addBeatContext = { sid, sceneDbId };
+  const menu = document.getElementById('add-beat-menu');
+  const btns = document.getElementById('add-beat-menu-btns');
+  if (!menu || !btns) return;
+  btns.innerHTML = BEAT_KINDS.map(k => `
+    <button class="se-kind-btn" onclick="createBeat('${escHtml(k.kind)}')">
+      <span style="font-size:18px;">${k.icon}</span>
+      <span>${escHtml(k.label)}</span>
+    </button>`).join('');
+  menu.style.display = 'block';
+}
+
+function closeAddBeatMenu() {
+  const menu = document.getElementById('add-beat-menu');
+  if (menu) menu.style.display = 'none';
+  _addBeatContext = null;
+}
+
+// Close add-beat menu when clicking outside
+document.addEventListener('click', e => {
+  const menu = document.getElementById('add-beat-menu');
+  if (menu && menu.style.display !== 'none') {
+    if (!e.target.closest('#add-beat-menu') && !e.target.closest('.se-btn-add')) {
+      closeAddBeatMenu();
+    }
+  }
+});
+
+function createBeat(kind) {
+  if (!_addBeatContext) return;
+  const { sid, sceneDbId } = _addBeatContext;
+  closeAddBeatMenu();
+
+  studioFetch(`/studio/api/scene/${sceneDbId}/beat/`, 'POST', { kind })
+  .then(res => {
+    if (!res.ok) throw new Error(res.error || 'Error');
+    const scene = DATA.scenes[sid];
+    if (scene) {
+      const beat = Object.assign({}, res.beat, { kind: res.beat.kind || '' });
+      scene.beats.push(beat);
+    }
+    renderAll();
+    selectNode('scene', sid);
+    setTimeout(() => {
+      const newCard = document.getElementById(`bc-${res.beat.id}`);
+      if (!newCard) return;
+      const body = newCard.querySelector('.se-beat-body');
+      if (body) body.style.display = 'block';
+      newCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 0);
+  })
+  .catch(err => studioToast('error', `Error al crear beat: ${err.message}`));
+}
+
+// ── Vignette picker ──
+let _vigPickerBeatId = null;
+
+function studioAssetPreviewUrl(rawPath) {
+  const p = (rawPath || '').trim();
+  if (!p) return '';
+  if (p.startsWith('http://') || p.startsWith('https://') || p.startsWith('/studio/asset-file/')) {
+    return p;
+  }
+  const clean = p.replace(/^\/+/, '');
+  return `/studio/asset-file/${encodeURI(clean)}`;
+}
+
+function vignetteImageUrlByRef(vigRef) {
+  const v = (DATA.assets?.vignettes || []).find(x => x.vignette_id === vigRef);
+  if (!v) return '';
+  return v.image_url || studioAssetPreviewUrl(v.image);
+}
+
+function openVigPicker(beatId) {
+  _vigPickerBeatId = beatId;
+  const backdrop = document.getElementById('vig-picker-backdrop');
+  const modal    = document.getElementById('vig-picker-modal');
+  const grid     = document.getElementById('vig-picker-grid');
+  if (!backdrop || !modal || !grid) return;
+
+  grid.innerHTML = '<div style="padding:16px;color:#94a3b8;">Cargando…</div>';
+  backdrop.style.display = 'block';
+  modal.style.display    = 'block';
+
+  fetch(`/studio/api/vignettes/?project=${STUDIO_PROJECT_ID}`)
+  .then(r => r.json())
+  .then(data => {
+    if (!data.ok || !data.vignettes.length) {
+      grid.innerHTML = '<div style="padding:16px;color:#94a3b8;">Sin viñetas definidas.</div>';
+      return;
+    }
+    grid.innerHTML = data.vignettes.map(v => `
+      <div class="vig-thumb" onclick="selectVignette(${v.id}, '${escHtml(v.vignette_id)}')">
+        <div class="vig-thumb-img">
+          ${(v.image_url || v.image)
+            ? `<img src="${escHtml(v.image_url || studioAssetPreviewUrl(v.image))}" alt="${escHtml(v.vignette_id)}"
+                    onerror="this.style.display='none'">`
+            : `<span style="font-size:28px;">🖼</span>`}
+        </div>
+        <div class="vig-thumb-label">${escHtml(v.vignette_id)}</div>
+        <div class="vig-thumb-sub">${escHtml(v.label || '')}</div>
+      </div>`).join('');
+  })
+  .catch(() => {
+    grid.innerHTML = '<div style="padding:16px;color:#ef4444;">Error al cargar viñetas.</div>';
+  });
+}
+
+function closeVigPicker() {
+  const backdrop = document.getElementById('vig-picker-backdrop');
+  const modal    = document.getElementById('vig-picker-modal');
+  if (backdrop) backdrop.style.display = 'none';
+  if (modal)    modal.style.display    = 'none';
+  _vigPickerBeatId = null;
+}
+
+function selectVignette(vigFkId, vigId) {
+  if (_vigPickerBeatId === null) return;
+  const beatId = _vigPickerBeatId;
+  const refEl  = document.getElementById(`bf-vref-${beatId}`);
+  const fkEl   = document.getElementById(`bf-vfk-${beatId}`);
+  const prevEl = document.getElementById(`vp-${beatId}`);
+  if (refEl)  refEl.value  = vigId;
+  if (fkEl)   fkEl.value   = vigFkId;
+  if (prevEl) {
+    const previewUrl = vignetteImageUrlByRef(vigId);
+    prevEl.style.display = 'flex';
+    prevEl.innerHTML = `
+      <img src="${escHtml(previewUrl)}" onerror="this.style.display='none'"
+           style="max-height:60px;border-radius:4px;object-fit:cover;">
+      <span class="se-vig-label">${escHtml(vigId)}</span>`;
+  }
+  closeVigPicker();
+}
+
+// ============================================================
+// INIT
+// ============================================================
+// Note: DOMContentLoaded + renderAll() + _loadCanvasState() handled by _story_map_js.html
+</script>
+
+{% endif %}
+</body>
+</html>

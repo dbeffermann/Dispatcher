@@ -1,0 +1,1391 @@
+'use strict';
+
+// ============================================================
+// DATA
+// ============================================================
+const DATA = JSON.parse(document.getElementById('story-data').textContent);
+let selectedNodeId = null;
+let selectedNodeType = null;
+let searchQuery = '';
+
+// ============================================================
+// UTILITIES
+// ============================================================
+function escHtml(s) {
+  return String(s || '')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;');
+}
+
+function trunc(s, n) {
+  s = String(s || '');
+  return s.length > n ? s.slice(0, n) + '…' : s;
+}
+
+function badge(type, label) {
+  return `<span class="badge badge-${type}">${escHtml(label || type.toUpperCase())}</span>`;
+}
+
+function warningCount() {
+  return DATA.warnings ? DATA.warnings.length : 0;
+}
+
+function warningsForScene(sid) {
+  return (DATA.warnings || []).filter(w => w.scene === sid);
+}
+
+function warningStatsForScene(sid) {
+  const stats = { total: 0, errors: 0, warnings: 0 };
+  for (const w of warningsForScene(sid)) {
+    stats.total += 1;
+    if (w.severity === 'error') stats.errors += 1;
+    else stats.warnings += 1;
+  }
+  return stats;
+}
+
+function getCookie(name) {
+  const value = `; ${document.cookie}`;
+  const parts = value.split(`; ${name}=`);
+  if (parts.length === 2) return parts.pop().split(';').shift();
+  return '';
+}
+
+function studioNotify(message, isError) {
+  if (!message) return;
+  if (typeof window.showToast === 'function') {
+    window.showToast(message, isError ? 'error' : 'success');
+    return;
+  }
+  console[isError ? 'error' : 'log'](message);
+}
+
+async function studioRequest(url, method, payload) {
+  const csrfToken = getCookie('csrftoken');
+  const response = await fetch(url, {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(csrfToken ? {'X-CSRFToken': csrfToken} : {}),
+    },
+    credentials: 'same-origin',
+    body: payload === undefined ? undefined : JSON.stringify(payload),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.ok === false) {
+    throw new Error(data.error || `Request failed (${response.status})`);
+  }
+  return data;
+}
+
+function studioSceneFromApi(scene) {
+  return {
+    id: scene.id,
+    scene_id: scene.scene_id,
+    title: scene.title || scene.scene_id,
+    channel: scene.channel || 'narration',
+    next: scene.next || scene.next_scene_id || '',
+    next_scene_id: scene.next_scene_id || scene.next || '',
+    objective: scene.objective || '',
+    case_id: scene.case_id || '',
+    case_pk: scene.case_pk || null,
+    beats: scene.beats || [],
+    choices: scene.choices || [],
+    admin_url: scene.admin_url || '',
+  };
+}
+
+function studioChoiceFromApi(choice) {
+  return {
+    id: choice.id,
+    at_beat: choice.at_beat,
+    prompt: choice.prompt || '',
+    admin_url: choice.admin_url || '',
+    options: (choice.options || []).map(studioOptionFromApi),
+  };
+}
+
+function studioOptionFromApi(option) {
+  return {
+    id: option.id,
+    order: option.order,
+    label: option.label || '',
+    goto: option.goto || '',
+    goto_scene_fk: option.goto_scene_fk || null,
+    goto_scene_id: option.goto_scene_id || option.goto || '',
+    admin_url: option.admin_url || '',
+    beats: option.beats || [],
+  };
+}
+
+function rebuildStudioGraph() {
+  const allSceneIds = new Set(Object.keys(DATA.scenes || {}));
+  const outgoing = {};
+  const incoming = {};
+  for (const sid of allSceneIds) {
+    outgoing[sid] = [];
+    incoming[sid] = new Set();
+  }
+
+  const nodes = [];
+  const edges = [];
+  const visited = new Set();
+  const edgeSet = new Set();
+  const colRow = {};
+  const edgeKey = (fromId, toId, type, label) => `${fromId}|${toId}|${type}|${label || ''}`;
+
+  const pushEdge = (fromId, toId, type, label) => {
+    if (!fromId || !toId || !allSceneIds.has(fromId) || !allSceneIds.has(toId)) return;
+    const key = edgeKey(fromId, toId, type, label);
+    if (edgeSet.has(key)) return;
+    edgeSet.add(key);
+    outgoing[fromId].push(toId);
+    incoming[toId].add(fromId);
+    edges.push({ from: fromId, to: toId, type, label: label || '' });
+  };
+
+  for (const [sid, scene] of Object.entries(DATA.scenes || {})) {
+    pushEdge(sid, (scene.next_scene_id || scene.next || '').trim(), 'next', '');
+    for (const choice of (scene.choices || [])) {
+      for (const option of (choice.options || [])) {
+        pushEdge(sid, (option.goto_scene_id || option.goto || '').trim(), 'choice', option.label || '->');
+      }
+    }
+  }
+
+  const dispatchNextByCase = {};
+  for (const c of (DATA.cases || [])) {
+    if (c.dispatch && c.dispatch.next_scene_id) dispatchNextByCase[c.case_id] = c.dispatch.next_scene_id;
+  }
+  for (const [sid, scene] of Object.entries(DATA.scenes || {})) {
+    const dispatchNext = dispatchNextByCase[scene.case_id || ''];
+    if (dispatchNext && (scene.beats || []).some(beat => beat.kind === 'dispatch')) {
+      pushEdge(sid, dispatchNext, 'next', '');
+    }
+  }
+
+  let entrypoints = [];
+  const projectStart = DATA.project && DATA.project.start_scene_id ? DATA.project.start_scene_id : '';
+  if (allSceneIds.has(projectStart)) entrypoints.push(projectStart);
+  for (const c of (DATA.cases || [])) {
+    if (allSceneIds.has(c.start_scene_id) && !entrypoints.includes(c.start_scene_id)) {
+      entrypoints.push(c.start_scene_id);
+    }
+  }
+  if (!entrypoints.length) {
+    entrypoints = [...allSceneIds].filter(sid => outgoing[sid].length && incoming[sid].size === 0).sort();
+  }
+
+  const addNode = (sid, col, orphan) => {
+    const row = colRow[col] || 0;
+    colRow[col] = row + 1;
+    nodes.push({ id: sid, col, row, orphan: !!orphan });
+  };
+  const visitFrom = (starts, startCol = 0) => {
+    const queue = starts.filter(sid => allSceneIds.has(sid)).map(sid => [sid, startCol]);
+    while (queue.length) {
+      const [sid, col] = queue.shift();
+      if (visited.has(sid)) continue;
+      visited.add(sid);
+      addNode(sid, col, false);
+      for (const nextId of (outgoing[sid] || [])) {
+        if (!visited.has(nextId)) queue.push([nextId, col + 1]);
+      }
+    }
+  };
+
+  visitFrom(entrypoints);
+
+  const connected = [...allSceneIds].filter(
+    sid => outgoing[sid].length || incoming[sid].size || entrypoints.includes(sid)
+  );
+  let maxCol = nodes.reduce((max, node) => Math.max(max, node.col), 0) + 2;
+  for (const sid of connected.filter(sid => !visited.has(sid)).sort()) {
+    visitFrom([sid], maxCol);
+  }
+
+  const connectedSet = new Set(connected);
+  const orphans = [...allSceneIds].filter(sid => !connectedSet.has(sid)).sort();
+  maxCol = nodes.reduce((max, node) => Math.max(max, node.col), 0) + 2;
+  orphans.forEach(sid => addNode(sid, maxCol, true));
+  DATA.flow = { nodes, edges, orphans };
+}
+
+function upsertSceneRecord(scene) {
+  DATA.scenes[scene.scene_id] = studioSceneFromApi(scene);
+}
+
+function upsertChoiceRecord(sceneId, choice) {
+  const scene = DATA.scenes[sceneId];
+  if (!scene) return;
+  const nextChoice = studioChoiceFromApi(choice);
+  const idx = (scene.choices || []).findIndex(ch => ch.id === nextChoice.id);
+  if (!scene.choices) scene.choices = [];
+  if (idx >= 0) scene.choices[idx] = nextChoice;
+  else scene.choices.push(nextChoice);
+  scene.choices.sort((a, b) => a.at_beat - b.at_beat || a.id - b.id);
+}
+
+function removeChoiceRecord(sceneId, choiceId) {
+  const scene = DATA.scenes[sceneId];
+  if (!scene || !scene.choices) return;
+  scene.choices = scene.choices.filter(ch => ch.id !== choiceId);
+}
+
+function upsertOptionRecord(sceneId, choiceId, option) {
+  const scene = DATA.scenes[sceneId];
+  if (!scene) return;
+  const choice = (scene.choices || []).find(ch => ch.id === choiceId);
+  if (!choice) return;
+  const nextOption = studioOptionFromApi(option);
+  const idx = (choice.options || []).findIndex(opt => opt.id === nextOption.id);
+  if (!choice.options) choice.options = [];
+  if (idx >= 0) choice.options[idx] = nextOption;
+  else choice.options.push(nextOption);
+  choice.options.sort((a, b) => a.order - b.order || a.id - b.id);
+}
+
+function sceneOptionsHtml(selectedId) {
+  const scenes = Object.values(DATA.scenes).slice().sort((a, b) => String(a.scene_id).localeCompare(String(b.scene_id)));
+  let html = `<option value="">(continúa aquí)</option>`;
+  for (const scene of scenes) {
+    const selected = selectedId && (selectedId === scene.scene_id || selectedId === String(scene.scene_id));
+    html += `<option value="${escHtml(scene.scene_id)}"${selected ? ' selected' : ''}>${escHtml(scene.scene_id)} — ${escHtml(scene.title || '')}</option>`;
+  }
+  return html;
+}
+
+// ============================================================
+// SEARCH
+// ============================================================
+function doSearch(q) {
+  searchQuery = q.toLowerCase().trim();
+  if (!searchQuery) {
+    const panel = document.getElementById('search-results-panel');
+    if (panel) { panel.innerHTML = ''; panel.style.display = 'none'; }
+    renderAll();
+    return;
+  }
+  _renderSearchPanel();
+}
+
+function _collectSearchResults(q) {
+  const results = [];
+  for (const [sid, scene] of Object.entries(DATA.scenes)) {
+    const sceneMatch = sid.toLowerCase().includes(q) || (scene.title || '').toLowerCase().includes(q);
+    const matchingBeats = [];
+    for (const b of (scene.beats || [])) {
+      if ((b.text || '').toLowerCase().includes(q) ||
+          (b.speaker || '').toLowerCase().includes(q) ||
+          (b.input_hint || '').toLowerCase().includes(q) ||
+          (b.input_answer || '').toLowerCase().includes(q)) {
+        matchingBeats.push({ speaker: b.speaker, text: b.text, kind: b.kind });
+      }
+    }
+    // Also search inside choice option beats
+    for (const ch of (scene.choices || [])) {
+      for (const opt of (ch.options || [])) {
+        for (const ob of (opt.beats || [])) {
+          if ((ob.text || '').toLowerCase().includes(q) || (ob.speaker || '').toLowerCase().includes(q)) {
+            matchingBeats.push({ speaker: ob.speaker, text: ob.text, kind: ob.kind, inChoice: true });
+          }
+        }
+      }
+    }
+    if (sceneMatch || matchingBeats.length) {
+      results.push({ sid, scene, matchingBeats });
+    }
+  }
+  // Sort: exact id/title matches first
+  results.sort((a, b) => {
+    const aExact = a.sid === q || (a.scene.title || '').toLowerCase() === q ? -1 : 0;
+    const bExact = b.sid === q || (b.scene.title || '').toLowerCase() === q ? 1 : 0;
+    return aExact + bExact;
+  });
+  return results;
+}
+
+function _renderSearchPanel() {
+  const panel = document.getElementById('search-results-panel');
+  if (!panel) return;
+  if (!searchQuery) { panel.innerHTML = ''; panel.style.display = 'none'; return; }
+  const results = _collectSearchResults(searchQuery);
+  if (!results.length) {
+    panel.innerHTML = `<div class="srp-empty">Sin resultados para "<b>${escHtml(searchQuery)}</b>"</div>`;
+    panel.style.display = 'block';
+    return;
+  }
+  const total = results.length;
+  const shown = results.slice(0, 15);
+  let html = `<div class="srp-header">${total} escena${total !== 1 ? 's' : ''} con coincidencias</div>`;
+  for (const r of shown) {
+    const sid = r.sid;
+    const s = r.scene;
+    const ch = s.channel === '911' ? '🚨' : s.channel === 'narration' ? '📚' : s.channel === 'whatsapp' ? '💬' : '📖';
+    html += `<div class="srp-scene" onclick="selectNode('scene','${escHtml(sid)}');document.getElementById('search-results-panel').style.display='none'">`;
+    html += `<div class="srp-scene-title">${ch} ${highlight(sid)}<span class="srp-scene-name">${highlight(s.title || '')}</span></div>`;
+    const beatMatches = r.matchingBeats.filter(b => !b.inChoice).slice(0, 3);
+    const choiceMatches = r.matchingBeats.filter(b => b.inChoice).slice(0, 2);
+    for (const b of beatMatches) {
+      const snippet = trunc(b.text || '', 55);
+      html += `<div class="srp-beat">`;
+      if (b.speaker) html += `<span class="srp-speaker">${highlight(b.speaker)}: </span>`;
+      html += `${highlight(snippet)}</div>`;
+    }
+    for (const b of choiceMatches) {
+      const snippet = trunc(b.text || '', 50);
+      html += `<div class="srp-beat"><span class="srp-badge">CHOICE</span>`;
+      if (b.speaker) html += `<span class="srp-speaker">${highlight(b.speaker)}: </span>`;
+      html += `${highlight(snippet)}</div>`;
+    }
+    const extra = r.matchingBeats.length - beatMatches.length - choiceMatches.length;
+    if (extra > 0) html += `<div class="srp-more">+${extra} coincidencia${extra !== 1 ? 's' : ''} más en esta escena</div>`;
+    html += `</div>`;
+  }
+  if (total > 15) html += `<div class="srp-empty">${total - 15} escenas más — refina la búsqueda</div>`;
+  panel.innerHTML = html;
+  panel.style.display = 'block';
+}
+
+function sceneMatchesSearch(sid, scene) {
+  if (!searchQuery) return true;
+  if (sid.toLowerCase().includes(searchQuery)) return true;
+  if ((scene.title || '').toLowerCase().includes(searchQuery)) return true;
+  for (const b of (scene.beats || [])) {
+    if ((b.text || '').toLowerCase().includes(searchQuery)) return true;
+    if ((b.speaker || '').toLowerCase().includes(searchQuery)) return true;
+  }
+  return false;
+}
+
+function highlight(text) {
+  if (!searchQuery || !text) return escHtml(text);
+  const re = new RegExp('(' + searchQuery.replace(/[.*+?^${}()|[\]\\]/g,'\\$&') + ')', 'gi');
+  return escHtml(text).replace(re, '<mark class="search-highlight">$1</mark>');
+}
+
+// Close panel on outside click
+document.addEventListener('click', e => {
+  const panel = document.getElementById('search-results-panel');
+  const wrap  = document.getElementById('search-input-wrap');
+  if (panel && panel.style.display !== 'none' && wrap && !wrap.contains(e.target)) {
+    panel.style.display = 'none';
+  }
+});
+
+// ============================================================
+// TREE
+// ============================================================
+function renderTree() {
+  const D = DATA;
+  const body = document.getElementById('tree-body');
+  if (!body) return;
+  let html = '';
+
+  html += treeSection('project', `
+    <span class="tree-toggle">&#9660;</span>
+    ${badge('global','GLOBAL')}
+    <span class="item-label">${escHtml(D.project.name)}</span>
+  `, true, `
+    <div class="tree-item" onclick="selectNode('project','${D.project.id}')">
+      <span class="scene-id">entrada:</span>
+      <span class="item-label">${escHtml(D.project.start_scene_id)}</span>
+    </div>
+  `);
+
+  // ---- CASES ----
+  let casesHtml = '';
+  for (const c of D.cases) {
+    const warnCount = (D.warnings || []).filter(w => w.case_id === c.case_id).length;
+    let caseInner = `
+      <div class="tree-item${warnCount ? ' has-warning' : ''}" onclick="selectNode('case','${c.case_id}')">
+        ${badge('case','CASE')}
+        <span class="item-label">${escHtml(c.title)}</span>
+        ${warnCount ? `<span style="color:#f59e0b;font-size:10px;">&#9888;${warnCount}</span>` : ''}
+      </div>`;
+    if (c.fields.length) {
+      let fieldsHtml = c.fields.map(f => `
+        <div class="tree-sub-item" onclick="selectNode('casefield','${f.field_id}')">
+          ${badge('input','INPUT')}
+          <span>${escHtml(f.field_id)}</span>
+          <span style="color:#9ca3af; font-size:10px;"> — ${escHtml(f.fact_path)}</span>
+        </div>`).join('');
+      caseInner += treeSection(`case-fields-${c.case_id}`,
+        `<span class="tree-toggle">&#9658;</span><span style="font-size:11px;color:#4b5563;">Campos (${c.fields.length})</span>`,
+        false, fieldsHtml, true);
+    }
+    if (c.tools.length) {
+      let toolsHtml = c.tools.map(t => `
+        <div class="tree-sub-item" onclick="selectNode('toolsearch','${t.search_id}')">
+          ${badge('toolsearch','TOOL')}
+          <span>${escHtml(t.search_id)}</span>
+        </div>`).join('');
+      caseInner += treeSection(`case-tools-${c.case_id}`,
+        `<span class="tree-toggle">&#9658;</span><span style="font-size:11px;color:#4b5563;">Herramientas (${c.tools.length})</span>`,
+        false, toolsHtml, true);
+    }
+    if (c.dispatch) {
+      caseInner += `
+        <div class="tree-sub-item" onclick="selectNode('dispatch','${c.case_id}')">
+          ${badge('dispatch','DISPATCH')}
+          <span>&#8594; ${escHtml(c.dispatch.next_scene_id)}</span>
+          <span style="color:#9ca3af; font-size:10px;">(${c.dispatch.outcomes.length} outcomes)</span>
+        </div>`;
+    }
+    casesHtml += treeSection(`case-${c.case_id}`,
+      `<span class="tree-toggle">&#9658;</span>${badge('case','CASE')}&nbsp;<span class="item-label">${escHtml(c.case_id)}</span>`,
+      false, caseInner, true);
+  }
+  html += treeSection('cases',
+    `<span class="tree-toggle">&#9658;</span><span>Casos (${D.cases.length})</span>`,
+    false, casesHtml);
+
+  // ---- SCENES ----
+  let scenesHtml = '';
+  const orderedScenes = D.flow.nodes.filter(n => !n.orphan).map(n => n.id).concat(D.flow.orphans);
+  for (const sid of orderedScenes) {
+    const s = DATA.scenes[sid];
+    if (!s) continue;
+    const warns = warningsForScene(sid);
+    const isOrphan = D.flow.orphans.includes(sid);
+    const is911 = s.channel === '911';
+    const vignetteRefs = [...new Set((s.beats || []).filter(b => b.kind === 'vignette' && b.vignette_ref).map(b => b.vignette_ref))];
+    const matchSearch = sceneMatchesSearch(sid, s);
+    let extraBadges = '';
+    if (is911) extraBadges += badge('911','911');
+    if (isOrphan) extraBadges += badge('orphan','AISLADA');
+    const nextLabel = s.next ? `<span style="color:#9ca3af; font-size:10px;">&#8594; ${escHtml(s.next)}</span>` : '';
+    scenesHtml += `
+      <div class="tree-item${warns.length ? ' has-warning' : ''}${searchQuery ? (matchSearch ? ' search-match' : ' search-hidden') : ''}"
+           id="tree-scene-${escHtml(sid)}"
+           onclick="selectNode('scene','${escHtml(sid)}')">
+        ${badge('scene','SCENE')} ${extraBadges}
+        <span class="scene-id">${escHtml(sid)}</span>
+        <span class="item-label">${highlight(s.title)}</span>
+        ${vignetteRefs.length ? `<span class="scene-vig-pill">&#128444; ${escHtml(vignetteRefs.join(', '))}</span>` : ''}
+        ${nextLabel}
+        ${warns.length ? `<span style="color:#f59e0b; font-size:10px;">&#9888;${warns.length}</span>` : ''}
+      </div>`;
+  }
+  html += treeSection('scenes',
+    `<span class="tree-toggle">&#9658;</span><span>Escenas (${Object.keys(D.scenes).length})</span>`,
+    false, scenesHtml);
+
+  // ---- ASSETS ----
+  let assetsHtml = '';
+  if (D.assets.vignettes.length) {
+    assetsHtml += treeSection('vignettes',
+      `<span class="tree-toggle">&#9658;</span><span style="font-size:11px;">Vignettes (${D.assets.vignettes.length})</span>`,
+      false,
+      D.assets.vignettes.map(v => `
+        <div class="tree-sub-item" onclick="selectNode('vignette','${escHtml(v.vignette_id)}')">
+          ${badge('asset','VIG')} ${escHtml(v.vignette_id)} &#8212; ${escHtml(v.label)}
+        </div>`).join(''),
+      true);
+  }
+  if (D.assets.audio.length) {
+    assetsHtml += treeSection('audio',
+      `<span class="tree-toggle">&#9658;</span><span style="font-size:11px;">Audio (${D.assets.audio.length})</span>`,
+      false,
+      D.assets.audio.map(a => `
+        <div class="tree-sub-item">
+          ${badge('asset', a.asset_type === 'music' ? 'MUSIC' : 'SFX')}
+          ${escHtml(a.key)}
+        </div>`).join(''),
+      true);
+  }
+  if (D.assets.contacts.length) {
+    assetsHtml += treeSection('contacts',
+      `<span class="tree-toggle">&#9658;</span><span style="font-size:11px;">Contactos (${D.assets.contacts.length})</span>`,
+      false,
+      D.assets.contacts.map(c => `
+        <div class="tree-sub-item" onclick="selectNode('contact','${escHtml(c.contact_id)}')">
+          ${badge('asset','CONT')} ${escHtml(c.name)} (${escHtml(c.contact_id)})
+        </div>`).join(''),
+      true);
+  }
+  html += treeSection('assets',
+    `<span class="tree-toggle">&#9658;</span><span>Assets</span>`,
+    false, assetsHtml);
+
+  // ---- WARNINGS ----
+  if (D.warnings && D.warnings.length) {
+    const wHtml = D.warnings.map(w => `
+      <div class="warn-item severity-${w.severity}" onclick="${w.scene ? `selectNode('scene','${escHtml(w.scene)}')` : ''}">
+        <span class="warn-icon">${w.severity === 'error' ? '&#128308;' : '&#128993;'}</span>
+        <span class="warn-scene">${escHtml(w.scene || w.case_id || '&#8212;')}</span>
+        <span class="warn-detail">${escHtml(w.detail)}</span>
+      </div>`).join('');
+    html += treeSection('warnings',
+      `<span class="tree-toggle">&#9658;</span><span style="color:#ef4444;">Warnings (${D.warnings.length})</span>`,
+      false,
+      `<div class="warnings-list">${wHtml}</div>`);
+  }
+
+  body.innerHTML = html;
+}
+
+function treeSection(id, headHtml, openDefault, bodyHtml, isSubSection) {
+  const cls = isSubSection ? '' : 'tree-section';
+  const bodyCls = openDefault ? 'open' : '';
+  return `
+    <div class="${cls}" id="ts-${id}">
+      <div class="tree-section-head" onclick="toggleSection('${id}')">${headHtml}</div>
+      <div class="tree-body ${bodyCls}" id="tb-${id}">${bodyHtml}</div>
+    </div>`;
+}
+
+function toggleSection(id) {
+  const body = document.getElementById(`tb-${id}`);
+  const head = document.querySelector(`#ts-${id} .tree-toggle`);
+  if (!body) return;
+  const isOpen = body.classList.toggle('open');
+  if (head) head.innerHTML = isOpen ? '&#9660;' : '&#9658;';
+}
+
+function expandAll() {
+  document.querySelectorAll('.tree-body').forEach(b => b.classList.add('open'));
+  document.querySelectorAll('.tree-toggle').forEach(t => t.innerHTML = '&#9660;');
+}
+
+// ============================================================
+// FLOW GRAPH (SVG) — interactive: pan, zoom, drag nodes, localStorage
+// ============================================================
+const NODE_W = 200, NODE_H = 68, GAP_X = 52, GAP_Y = 28;
+const COL_W = NODE_W + GAP_X;
+const ROW_H = NODE_H + GAP_Y;
+const PAD   = 36;
+const CANVAS_LS_KEY = 'dispatcher_canvas_v1';
+
+let canvasTransform = { x: 20, y: 20, scale: 0.9 };
+let customNodePos   = {};
+
+function _loadCanvasState() {
+  try {
+    const s = JSON.parse(localStorage.getItem(CANVAS_LS_KEY) || '{}');
+    if (s.transform) canvasTransform = { x: s.transform.x||20, y: s.transform.y||20, scale: s.transform.scale||0.9 };
+    if (s.nodes)     customNodePos   = s.nodes;
+  } catch(e) {}
+}
+function _saveCanvasState() {
+  try { localStorage.setItem(CANVAS_LS_KEY, JSON.stringify({ transform: canvasTransform, nodes: customNodePos })); }
+  catch(e) {}
+}
+function _applyCanvasTransform() {
+  const el = document.getElementById('flow-canvas');
+  if (el) el.style.transform = `translate(${canvasTransform.x}px,${canvasTransform.y}px) scale(${canvasTransform.scale})`;
+}
+
+function _autoLayoutPos(nodes) {
+  const pos = {};
+  nodes.forEach(n => {
+    pos[n.id] = customNodePos[n.id] || { x: PAD + n.col * COL_W, y: PAD + n.row * ROW_H };
+  });
+  return pos;
+}
+
+function _flowDefs() {
+  return `<defs>
+    <marker id="arr-next" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon points="0 0,8 3,0 6" fill="#3b82f6" opacity="0.8"/></marker>
+    <marker id="arr-choice" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon points="0 0,8 3,0 6" fill="#8b5cf6" opacity="0.8"/></marker>
+  </defs>`;
+}
+
+function _buildEdgeParts(edges, pos) {
+  const parts = [];
+  for (const e of edges) {
+    const fp = pos[e.from], tp = pos[e.to];
+    if (!fp || !tp) continue;
+    const x1 = fp.x + NODE_W, y1 = fp.y + NODE_H / 2;
+    const x2 = tp.x,          y2 = tp.y + NODE_H / 2;
+    const mx = (x1 + x2) / 2;
+    const isChoice = e.type === 'choice';
+    const color = isChoice ? '#8b5cf6' : '#3b82f6';
+    const marker = isChoice ? 'arr-choice' : 'arr-next';
+    const dash = isChoice ? 'stroke-dasharray="5,3"' : '';
+    parts.push(`<path d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}"
+      fill="none" stroke="${color}" stroke-width="2" opacity="0.7"
+      ${dash} marker-end="url(#${marker})"/>`);
+    if (e.label && isChoice) {
+      const lx = mx, ly = (y1+y2)/2 - 4, lw = Math.min(e.label.length*5.5+8, 90);
+      parts.push(`<rect x="${lx-lw/2}" y="${ly-11}" width="${lw}" height="14" fill="white" opacity="0.85" rx="3"/>`);
+      parts.push(`<text x="${lx}" y="${ly}" font-size="9" fill="#6d28d9" font-style="italic" text-anchor="middle">${escHtml(trunc(e.label,16))}</text>`);
+    }
+  }
+  return parts;
+}
+
+// Node visual rules are driven by scene data and warnings, not random styling:
+// 1) isolated scene -> amber (highest priority)
+// 2) channel === '911' -> red
+// 3) channel === 'narration' -> slate
+// 4) any other channel -> blue
+// Warning count appears as the red badge (top-right), sourced from DATA.warnings.
+function getNodeVisualState(scene, node, warningsCount, isSelected) {
+  const state = {
+    fill: '#dbeafe',
+    stroke: '#3b82f6',
+    strokeW: 1.5,
+    reason: 'other-channel',
+  };
+
+  if (node.orphan) {
+    state.fill = '#fef3c7';
+    state.stroke = '#f59e0b';
+    state.reason = 'orphan';
+  } else if (scene.channel === '911') {
+    state.fill = '#fee2e2';
+    state.stroke = '#ef4444';
+    state.reason = 'channel-911';
+  } else if (scene.channel === 'narration') {
+    state.fill = '#f1f5f9';
+    state.stroke = '#64748b';
+    state.reason = 'channel-narration';
+  }
+
+  if (isSelected) {
+    state.stroke = '#1d4ed8';
+    state.strokeW = 3;
+  }
+  if (warningsCount > 0) {
+    state.strokeW = Math.max(state.strokeW, 2);
+  }
+  return state;
+}
+
+function _buildNodePart(n, pos) {
+  const s = DATA.scenes[n.id];
+  if (!s) return '';
+  const p = pos[n.id];
+  const warnStats = warningStatsForScene(n.id);
+  const is911 = s.channel === '911';
+  const isSelected = selectedNodeId === n.id && selectedNodeType === 'scene';
+  const visual = getNodeVisualState(s, n, warnStats.total, isSelected);
+  const beatsCount = (s.beats||[]).length;
+  const choicesCount = (s.choices||[]).length;
+  const vigRefs = [...new Set((s.beats||[]).filter(b=>b.kind==='vignette'&&b.vignette_ref).map(b=>b.vignette_ref))];
+  const chIcon = is911?'&#128680;':s.channel==='narration'?'&#128218;':s.channel==='whatsapp'?'&#128172;':'';
+  // Info line: "N beat(s) · M choice(s)"
+  let infoLine = `${beatsCount} beat${beatsCount!==1?'s':''}`;
+  if (choicesCount>0) infoLine += ` \xb7 ${choicesCount} choice${choicesCount!==1?'s':''}`;
+  if (n.orphan) infoLine += ' \xb7 AISLADA';
+
+  const warningBadges = [];
+  if (warnStats.errors > 0) {
+    warningBadges.push(`<rect x="${NODE_W-58}" y="3" width="24" height="12" rx="6" fill="#ef4444" stroke="white" stroke-width="1"/><text x="${NODE_W-46}" y="12" text-anchor="middle" font-size="8" font-weight="700" fill="white">E${warnStats.errors}</text>`);
+  }
+  if (warnStats.warnings > 0) {
+    warningBadges.push(`<rect x="${NODE_W-31}" y="3" width="24" height="12" rx="6" fill="#f59e0b" stroke="white" stroke-width="1"/><text x="${NODE_W-19}" y="12" text-anchor="middle" font-size="8" font-weight="700" fill="white">W${warnStats.warnings}</text>`);
+  }
+  // Vignette row y=47 (below title at y=33), beats info row y=62 (NODE_H-6)
+  return `<g class="flow-node${isSelected?' selected':''}" data-id="${escHtml(n.id)}"
+    data-color-reason="${escHtml(visual.reason)}"
+    transform="translate(${p.x},${p.y})"
+    onclick="selectNode('scene','${escHtml(n.id)}')" style="cursor:grab">
+    <rect x="0" y="0" width="${NODE_W}" height="${NODE_H}" rx="7" fill="${visual.fill}" stroke="${visual.stroke}" stroke-width="${visual.strokeW}"/>
+    ${warningBadges.join('')}
+    <text x="9" y="18" font-size="11" font-weight="700" fill="#1e3a5f">${chIcon?`<tspan>${chIcon}</tspan><tspan> </tspan>`:''}<tspan>${escHtml(n.id)}</tspan></text>
+    <text x="9" y="33" font-size="10" fill="#374151">${escHtml(trunc(s.title,25))}</text>
+    ${vigRefs.length?`<text x="9" y="47" font-size="9" fill="#9a3412">&#128444; ${escHtml(trunc(vigRefs.join(', '),24))}</text>`:''}
+    <text x="9" y="${NODE_H-6}" font-size="9" fill="#9ca3af">${infoLine}</text>
+  </g>`;
+}
+
+function renderFlow() {
+  const nodes = DATA.flow.nodes;
+  const edges = DATA.flow.edges;
+  const canvas = document.getElementById('flow-canvas');
+  if (!canvas) return;
+  if (!nodes.length) {
+    canvas.innerHTML = '<p style="color:#6b7280;padding:24px;">No hay escenas.</p>';
+    return;
+  }
+  const pos  = _autoLayoutPos(nodes);
+  // SVG is an infinite canvas: overflow:visible lets nodes live anywhere;
+  // clipping is handled by #flow-canvas-wrap overflow:hidden.
+  canvas.innerHTML =
+    `<svg id="flow-svg" width="1" height="1" style="overflow:visible" xmlns="http://www.w3.org/2000/svg">
+      ${_flowDefs()}
+      <g id="edges-layer">${_buildEdgeParts(edges,pos).join('\n')}</g>
+      <g id="nodes-layer">${nodes.map(n=>_buildNodePart(n,pos)).join('\n')}</g>
+    </svg>`;
+  _setupFlowInteraction();
+}
+
+function _redrawEdges(edges) {
+  const el = document.getElementById('edges-layer');
+  if (!el) return;
+  const pos = {};
+  document.querySelectorAll('#nodes-layer .flow-node').forEach(g => {
+    const id = g.getAttribute('data-id');
+    const m  = (g.getAttribute('transform')||'').match(/translate\(([^,]+),([^)]+)\)/);
+    if (m) pos[id] = { x: +m[1], y: +m[2] };
+  });
+  el.innerHTML = _buildEdgeParts(edges, pos).join('\n');
+}
+
+let _activeDrag = null, _activePan = null, _docListenersAdded = false;
+
+function _setupFlowInteraction() {
+  const wrap = document.getElementById('flow-canvas-wrap');
+  if (!wrap) return;
+  const edges = DATA.flow.edges;
+
+  document.querySelectorAll('#nodes-layer .flow-node').forEach(g => {
+    g.addEventListener('mousedown', e => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      const id = g.getAttribute('data-id');
+      const m  = (g.getAttribute('transform')||'').match(/translate\(([^,]+),([^)]+)\)/);
+      _activeDrag = { g, id, ox: m?+m[1]:0, oy: m?+m[2]:0, startSX: e.clientX, startSY: e.clientY };
+      g.style.cursor = 'grabbing';
+    });
+  });
+
+  if (_docListenersAdded) return;
+  _docListenersAdded = true;
+
+  wrap.addEventListener('wheel', e => {
+    e.preventDefault();
+    canvasTransform.scale = Math.max(0.2, Math.min(4, canvasTransform.scale * (e.deltaY < 0 ? 1.12 : 0.89)));
+    _applyCanvasTransform(); _saveCanvasState();
+  }, { passive: false });
+
+  wrap.addEventListener('mousedown', e => {
+    if (e.button !== 0 || _activeDrag || e.target.closest('.flow-node')) return;
+    _activePan = { startX: e.clientX - canvasTransform.x, startY: e.clientY - canvasTransform.y };
+    wrap.style.cursor = 'grabbing';
+  });
+
+  document.addEventListener('mousemove', e => {
+    if (_activeDrag) {
+      const dx = (e.clientX - _activeDrag.startSX) / canvasTransform.scale;
+      const dy = (e.clientY - _activeDrag.startSY) / canvasTransform.scale;
+      _activeDrag.g.setAttribute('transform', `translate(${_activeDrag.ox+dx},${_activeDrag.oy+dy})`);
+      _redrawEdges(edges);
+    } else if (_activePan) {
+      canvasTransform.x = e.clientX - _activePan.startX;
+      canvasTransform.y = e.clientY - _activePan.startY;
+      _applyCanvasTransform();
+    }
+  });
+
+  document.addEventListener('mouseup', () => {
+    if (_activeDrag) {
+      const m = (_activeDrag.g.getAttribute('transform')||'').match(/translate\(([^,]+),([^)]+)\)/);
+      if (m) customNodePos[_activeDrag.id] = { x: +m[1], y: +m[2] };
+      _activeDrag.g.style.cursor = 'grab';
+      _saveCanvasState(); _activeDrag = null;
+    }
+    if (_activePan) {
+      const wrap2 = document.getElementById('flow-canvas-wrap');
+      if (wrap2) wrap2.style.cursor = '';
+      _saveCanvasState(); _activePan = null;
+    }
+  });
+}
+
+function resetFlowLayout() {
+  customNodePos = {}; canvasTransform = { x: 20, y: 20, scale: 0.9 };
+  _saveCanvasState(); renderFlow(); _applyCanvasTransform();
+}
+function fitFlowView() {
+  const wrap = document.getElementById('flow-canvas-wrap');
+  if (!wrap) return;
+  // Calculate bounds from actual node positions (works even after drag)
+  const nodeEls = document.querySelectorAll('#nodes-layer .flow-node');
+  if (!nodeEls.length) return;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  nodeEls.forEach(g => {
+    const m = (g.getAttribute('transform') || '').match(/translate\(([^,]+),([^)]+)\)/);
+    if (!m) return;
+    const x = +m[1], y = +m[2];
+    minX = Math.min(minX, x);       minY = Math.min(minY, y);
+    maxX = Math.max(maxX, x + NODE_W); maxY = Math.max(maxY, y + NODE_H);
+  });
+  if (!isFinite(minX)) return;
+  const contentW = maxX - minX + PAD * 2;
+  const contentH = maxY - minY + PAD * 2;
+  const scale = Math.max(0.2, Math.min(1.2, Math.min(
+    (wrap.clientWidth  - 48) / contentW,
+    (wrap.clientHeight - 48) / contentH
+  )));
+  canvasTransform = { x: 24 - minX * scale, y: 24 - minY * scale, scale };
+  _applyCanvasTransform(); _saveCanvasState();
+}
+function adjustZoom(f) {
+  canvasTransform.scale = Math.max(0.2, Math.min(4, canvasTransform.scale * f));
+  _applyCanvasTransform(); _saveCanvasState();
+}
+
+// ============================================================
+// INSPECTOR
+// ============================================================
+function selectNode(type, id) {
+  selectedNodeId = id;
+  selectedNodeType = type;
+
+  document.querySelectorAll('.tree-item, .tree-sub-item').forEach(el => el.classList.remove('selected'));
+  const treeEl = document.getElementById(`tree-scene-${id}`);
+  if (treeEl) treeEl.classList.add('selected');
+
+  renderFlow();
+  _applyCanvasTransform();
+
+  const body = document.getElementById('inspector-body');
+  const closeBtn = document.getElementById('insp-close-btn');
+  if (closeBtn) closeBtn.style.display = 'block';
+
+  let html = '';
+  if (type === 'scene')      html = renderSceneInspector(id);
+  else if (type === 'case')  html = renderCaseInspector(id);
+  else if (type === 'casefield')   html = renderCaseFieldInspector(id);
+  else if (type === 'toolsearch')  html = renderToolSearchInspector(id);
+  else if (type === 'dispatch')    html = renderDispatchInspector(id);
+  else if (type === 'project')     html = renderProjectInspector();
+  else if (type === 'vignette')    html = renderVignetteInspector(id);
+  else if (type === 'contact')     html = renderContactInspector(id);
+
+  if (body) body.innerHTML = html || '<div style="padding:16px;color:#9ca3af;">Sin detalles.</div>';
+  if (treeEl) treeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+  // Auto-expand right panel if collapsed (studio mode)
+  const right = document.getElementById('studio-right');
+  if (right && right.classList.contains('collapsed')) {
+    right.classList.remove('collapsed');
+  }
+}
+
+function clearInspector() {
+  selectedNodeId = null; selectedNodeType = null;
+  const body = document.getElementById('inspector-body');
+  if (body) body.innerHTML = `
+    <div class="inspector-empty">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+      </svg>
+      <span>Haz clic en una escena,<br>caso o asset para ver detalles.</span>
+    </div>`;
+  const closeBtn = document.getElementById('insp-close-btn');
+  if (closeBtn) closeBtn.style.display = 'none';
+  document.querySelectorAll('.tree-item, .tree-sub-item').forEach(el => el.classList.remove('selected'));
+  renderFlow();
+}
+
+// ============================================================
+// TIMELINE HELPERS
+// ============================================================
+function beatCategory(kind) {
+  if (['input', 'tool-search', 'dispatch'].includes(kind)) return 'action';
+  if (kind === 'vignette') return 'transition';
+  return 'readonly';
+}
+
+function renderBeatItem(b) {
+  const kind = b.kind || 'dialogue';
+  const cat  = beatCategory(kind);
+  let cls = '', content = '';
+  if (kind === 'dialogue') {
+    content = `<span class="beat-speaker">${escHtml(b.speaker)}</span>: <span class="beat-text">${highlight(b.text)}</span>`;
+  } else if (kind === 'narration') {
+    cls = 'beat-narration'; content = `${badge('narration','NAR')} ${highlight(b.text)}`;
+  } else if (kind === 'input') {
+    cls = 'beat-input'; content = `${badge('input','INPUT')} campo: <code>${escHtml(b.input_field)}</code>`
+      + (b.input_hint ? `<br><span style="color:#374151;">${escHtml(b.input_hint)}</span>` : '');
+  } else if (kind === 'tool-search') {
+    cls = 'beat-tool'; content = `${badge('toolsearch','TOOL')} herramienta: <code>${escHtml(b.tool_ref)}</code>`;
+  } else if (kind === 'vignette') {
+    const action = b.vignette_action || b.action || '';
+    const scene  = b.vignette_ref || '';
+    if (!action)         { cls = 'beat-vignette'; content = `${badge('asset','VIG')} plano: <code>${escHtml(scene)}</code>`; }
+    else if (action==='open')  { cls = 'beat-vignette'; content = `${badge('asset','VIG-OPEN')} &#9654; abrir plano: <code>${escHtml(scene)}</code>${b.text ? ` &mdash; <em>${escHtml(b.text)}</em>` : ''}`; }
+    else if (action==='text')  { cls = 'beat-vignette'; content = `${badge('asset','VIG-TXT')} &#9998; texto: <em>${escHtml(b.text || '')}</em>`; }
+    else if (action==='change'){ cls = 'beat-vignette'; content = `${badge('asset','VIG-CHG')} &#8635; cambiar plano: <code>${escHtml(scene)}</code>`; }
+    else if (action==='close') { cls = 'beat-vignette'; content = `${badge('asset','VIG-CLOSE')} &#9632; cerrar vi\xf1eta`; }
+    else                       { cls = 'beat-vignette'; content = `${badge('asset','VIG')} ${escHtml(action)}: <code>${escHtml(scene)}</code>`; }
+  } else if (kind === 'wa') {
+    cls = 'beat-wa';
+    content = `${badge('toolsearch','WA')} contacto: <code>${escHtml(b.wa_contact || 'dani')}</code>`
+      + `${b.media_type ? ` \xb7 media: <code>${escHtml(b.media_type)}</code>` : ''}`
+      + `${b.media_url  ? `<br><span style="color:#0f766e;">${escHtml(b.media_url)}</span>` : ''}`
+      + `${b.media_caption ? `<br><span style="color:#6b7280;">${escHtml(b.media_caption)}</span>` : ''}`;
+  } else if (kind === 'sfx') {
+    cls = 'beat-sfx'; content = `${badge('sfx','SFX')} clave: <code>${escHtml(b.sfx_key || 'notif')}</code>`;
+  } else if (kind === 'ambient') {
+    cls = 'beat-ambient'; content = `${badge('ambient','AMBIENT')} ${b.ambient_stop ? '<em>stop</em>' : `clave: <code>${escHtml(b.ambient_key || '—')}</code>`}`;
+  } else if (kind === 'dispatch') {
+    cls = 'beat-sfx'; content = `${badge('dispatch','DISPATCH')} selecciona unidades en consola de despacho`;
+  }
+  return `<div class="beat-item ${cls} cat-${cat}"><span style="color:#64748b;font-size:10px;font-weight:600;">[${b.order}]</span> ${content}</div>`;
+}
+
+function renderChoiceInline(sid, ch, allScenes) {
+  const totalBeats = (DATA.scenes[sid]?.beats || []).length;
+  const atBeat = Number.isFinite(Number(ch.at_beat)) ? Number(ch.at_beat) : 0;
+  const anchorLabel = atBeat <= 0
+    ? 'al inicio de la escena'
+    : (atBeat >= totalBeats ? 'al final de la escena' : `después del beat ${atBeat}`);
+  const choiceId = `choice-${ch.id}`;
+  let html = `<div class="tl-choice-wrap">
+    <details class="tl-choice-detail" open>
+      <summary>
+        <span class="tl-choice-prompt">${badge('choice','CHOICE')} <em style="font-weight:400;">"${escHtml(trunc(ch.prompt, 65))}"</em></span>
+      </summary>
+      <div class="tl-choice-body">
+        <div class="tl-choice-controls">
+          <label>Punto narrativo</label>
+          <div style="font-size:11px;color:#1d4ed8;font-weight:600;">${escHtml(anchorLabel)}</div>
+          <label>Prompt</label>
+          <input id="choice-prompt-${ch.id}" type="text" value="${escHtml(ch.prompt)}">
+          <button class="sh-btn" type="button" ${atBeat <= 0 ? 'disabled' : ''}
+                  onclick="moveStudioChoice(${ch.id}, '${escHtml(sid)}', -1)">Mover antes</button>
+          <button class="sh-btn" type="button" ${atBeat >= totalBeats ? 'disabled' : ''}
+                  onclick="moveStudioChoice(${ch.id}, '${escHtml(sid)}', 1)">Mover después</button>
+          <button class="sh-btn accent" type="button" onclick="saveStudioChoice(${ch.id}, '${escHtml(sid)}')">Guardar</button>
+          <button class="sh-btn" type="button" onclick="deleteStudioChoice(${ch.id}, '${escHtml(sid)}')">Eliminar</button>
+        </div>
+        <div class="tl-option-add">
+          <input id="new-option-label-${ch.id}" type="text" placeholder="Nueva opción" value="">
+          <select id="new-option-goto-${ch.id}">${sceneOptionsHtml('')}</select>
+          <input id="new-option-scene-${ch.id}" type="text" placeholder="nuevo destino">
+          <input id="new-option-title-${ch.id}" type="text" placeholder="Título destino">
+          <input id="new-option-channel-${ch.id}" type="text" placeholder="canal" value="narration">
+          <button class="sh-btn accent" type="button" onclick="createStudioChoiceOption(${ch.id}, '${escHtml(sid)}')">Agregar opción</button>
+        </div>`;
+  for (const opt of (ch.options || [])) {
+    const selectedGoto = opt.goto_scene_id || opt.goto || '';
+    const broken = selectedGoto && !allScenes.has(selectedGoto);
+    const gotoTag = selectedGoto
+      ? `<span class="tl-opt-goto${broken ? ' broken' : ''}">${broken ? '&#9888; ' : '&#8594; '}${escHtml(selectedGoto)}</span>`
+      : `<span class="tl-opt-goto continues">&#8617; continúa aquí</span>`;
+    const hasBeats = opt.beats && opt.beats.length > 0;
+    html += `<div class="tl-option">
+      <details class="tl-option-detail" open>
+        <summary>
+          <span class="tl-opt-label">${escHtml(opt.label)}</span>
+          ${gotoTag}
+        </summary>
+        <div class="tl-option-controls">
+          <label>Texto</label>
+          <input id="opt-label-${opt.id}" type="text" value="${escHtml(opt.label)}">
+          <label>Destino</label>
+          <select id="opt-goto-${opt.id}">${sceneOptionsHtml(selectedGoto)}</select>
+          <button class="sh-btn accent" type="button" onclick="saveStudioChoiceOption(${opt.id}, '${escHtml(sid)}', ${ch.id})">Guardar</button>
+          <button class="sh-btn" type="button" onclick="deleteStudioChoiceOption(${opt.id}, '${escHtml(sid)}', ${ch.id})">Eliminar</button>
+        </div>
+        <div class="tl-option-add">
+          <input id="opt-new-scene-${opt.id}" type="text" placeholder="nuevo destino">
+          <input id="opt-new-title-${opt.id}" type="text" placeholder="Título destino">
+          <input id="opt-new-channel-${opt.id}" type="text" placeholder="canal" value="narration">
+          <button class="sh-btn" type="button" onclick="createOptionDestinationScene(${opt.id}, '${escHtml(sid)}', ${ch.id})">Crear destino</button>
+        </div>`;
+    if (hasBeats) {
+      html += `<div class="tl-option-beats">`;
+      for (const ob of opt.beats) html += renderBeatItem(ob);
+      html += `</div>`;
+    }
+    html += `</details></div>`;
+  }
+  html += `</div></details></div>`;
+  return html;
+}
+
+function renderSceneInspector(sid) {
+  const s = DATA.scenes[sid];
+  if (!s) return `<div class="insp-section"><p style="color:#ef4444;">Escena "${escHtml(sid)}" no encontrada.</p></div>`;
+  const warns = warningsForScene(sid);
+  const is911 = s.channel === '911';
+  const allSceneIds = new Set(Object.keys(DATA.scenes));
+  const vignetteRefs = [...new Set((s.beats||[]).filter(b=>b.kind==='vignette'&&b.vignette_ref).map(b=>b.vignette_ref))];
+  const beatCats = { readonly: 0, action: 0, transition: 0 };
+  for (const b of (s.beats || [])) beatCats[beatCategory(b.kind || 'dialogue')]++;
+  const choiceCount = (s.choices || []).length;
+  const summaryHtml = `<div class="beat-summary">
+    <span>&#127902; Beats: <b>${(s.beats||[]).length}</b></span>
+    <span class="bs-sep">\xb7</span>
+    <span>Lectura: <b>${beatCats.readonly}</b></span>
+    <span class="bs-sep">\xb7</span>
+    <span class="bs-action">Acciones: <b>${beatCats.action}</b></span>
+    <span class="bs-sep">\xb7</span>
+    <span class="bs-transition">Transici\xf3n: <b>${beatCats.transition}</b></span>
+    <span class="bs-sep">\xb7</span>
+    <span>Choices: <b>${choiceCount}</b></span>
+  </div>`;
+
+  let html = `<div class="insp-section">
+    <div class="insp-title">${escHtml(s.title)}</div>
+    <div class="insp-id">${badge('scene','SCENE')} ${is911?badge('911','911'):''} <code>${escHtml(sid)}</code></div>
+    <div class="insp-meta">
+      <b>Canal:</b> ${escHtml(s.channel || '(sin canal)')}<br>
+      <b>Siguiente:</b> ${s.next
+        ? `<code style="${allSceneIds.has(s.next)?'':'color:#dc2626'}">${escHtml(s.next)}</code>${allSceneIds.has(s.next)?'':' &#9888; no existe'}`
+        : '<span style="color:#9ca3af;">(ninguno)</span>'}<br>
+      <b>Vi\xf1etas:</b> ${vignetteRefs.length ? vignetteRefs.map(v=>`<code>${escHtml(v)}</code>`).join(', ') : '<span style="color:#64748b;">No usa</span>'}
+    </div>
+    ${summaryHtml}
+    ${s.objective ? `<div class="insp-objective" style="margin-top:6px;">&#128221; ${escHtml(s.objective)}</div>` : ''}
+    <div style="margin-top:8px;">
+      <a class="insp-edit-btn" href="${escHtml(s.admin_url)}" target="_blank">&#9998; Editar en Admin</a>
+      <button class="sh-btn accent" type="button" style="margin-left:6px;" onclick="selectNode('project', '${escHtml(DATA.project.id)}')">+ Nueva escena</button>
+    </div>
+  </div>`;
+
+  html += `<div class="insp-section">
+    <div class="insp-sub-title">Crear choice</div>
+    <div class="tl-choice-controls">
+      <label>Punto narrativo</label>
+      <select id="new-choice-anchor-${sid}">
+        ${Array.from({ length: (s.beats || []).length + 1 }, (_, idx) => {
+          const label = idx === 0 ? 'Inicio de la escena' : (idx === (s.beats || []).length ? 'Final de la escena' : `Después del beat ${idx}`);
+          const selected = idx === (s.beats || []).length ? ' selected' : '';
+          return `<option value="${idx}"${selected}>${escHtml(label)}</option>`;
+        }).join('')}
+      </select>
+      <label>Prompt</label>
+      <input id="new-choice-prompt-${sid}" type="text" value="Elige una opción">
+      <button class="sh-btn accent" type="button" onclick="createStudioChoice('${escHtml(sid)}')">Crear choice</button>
+    </div>
+  </div>`;
+
+  if (warns.length) {
+    html += `<div class="insp-section"><div class="insp-sub-title">Warnings (${warns.length})</div>`;
+    for (const w of warns) {
+      html += `<div class="warn-item severity-${w.severity}">
+        <span class="warn-icon">${w.severity==='error'?'&#128308;':'&#128993;'}</span>
+        <span class="warn-detail">${escHtml(w.detail)}</span>
+        <a href="${escHtml(w.admin_url)}" target="_blank" style="color:#3b82f6;font-size:10px;">Editar</a>
+      </div>`;
+    }
+    html += '</div>';
+  }
+
+  const beatList = s.beats || [];
+  const choiceList = s.choices || [];
+  if (beatList.length || choiceList.length) {
+    const choiceAt = {};
+    for (const ch of choiceList) {
+      if (!choiceAt[ch.at_beat]) choiceAt[ch.at_beat] = [];
+      choiceAt[ch.at_beat].push(ch);
+    }
+    const handledAt = new Set();
+    html += `<div class="insp-section">
+      <div class="insp-sub-title">Timeline de beats (${beatList.length} beats \xb7 ${choiceList.length} choices)</div>`;
+    for (const b of beatList) {
+      html += renderBeatItem(b);
+      const afterIdx = b.order + 1;
+      if (choiceAt[afterIdx]) {
+        handledAt.add(afterIdx);
+        for (const ch of choiceAt[afterIdx]) html += renderChoiceInline(sid, ch, allSceneIds);
+      }
+    }
+    for (const [key, chs] of Object.entries(choiceAt)) {
+      if (handledAt.has(+key)) continue;
+      for (const ch of chs) html += renderChoiceInline(sid, ch, allSceneIds);
+    }
+    html += '</div>';
+  }
+  return html;
+}
+
+function renderCaseInspector(caseId) {
+  const c = DATA.cases.find(c => c.case_id === caseId);
+  if (!c) return '';
+  const allSceneIds = new Set(Object.keys(DATA.scenes));
+  let html = `<div class="insp-section">
+    <div class="insp-title">${escHtml(c.title)}</div>
+    <div class="insp-id">${badge('case','CASE')} <code>${escHtml(c.case_id)}</code></div>
+    <div class="insp-meta">
+      <b>Escena inicial:</b> <code style="${allSceneIds.has(c.start_scene_id)?'':'color:#dc2626'}">${escHtml(c.start_scene_id)}</code><br>
+      <b>Campos:</b> ${c.fields.length} &nbsp; <b>Herramientas:</b> ${c.tools.length}
+    </div>
+    ${c.description ? `<div class="insp-objective">${escHtml(c.description)}</div>` : ''}
+    <div style="margin-top:8px;"><a class="insp-edit-btn" href="${escHtml(c.admin_url)}" target="_blank">&#9998; Editar en Admin</a></div>
+  </div>`;
+  if (c.fields.length) {
+    html += `<div class="insp-section"><div class="insp-sub-title">Campos (${c.fields.length})</div>`;
+    for (const f of c.fields) {
+      html += `<div style="margin-bottom:6px;">
+        <span class="field-pill">${escHtml(f.field_id)}</span>
+        <span style="font-size:11px;color:#6b7280;"> ${escHtml(f.fact_path)}</span>
+        ${f.notification_label ? `<br><span style="font-size:10px;color:#9ca3af;">${escHtml(f.notification_label)}</span>` : ''}
+        <a href="${escHtml(f.admin_url)}" target="_blank" style="font-size:10px;color:#3b82f6;margin-left:4px;">&#9998;</a>
+      </div>`;
+    }
+    html += '</div>';
+  }
+  if (c.tools.length) {
+    html += `<div class="insp-section"><div class="insp-sub-title">Herramientas (${c.tools.length})</div>`;
+    for (const t of c.tools) {
+      html += `<div style="margin-bottom:6px;">
+        <span class="tool-pill">${escHtml(t.search_id)}</span>
+        <span style="font-size:11px;color:#374151;"> ${escHtml(t.title)}</span>
+        ${t.hint ? `<br><span style="font-size:10px;color:#9ca3af;">${escHtml(t.hint)}</span>` : ''}
+        <a href="${escHtml(t.admin_url)}" target="_blank" style="font-size:10px;color:#3b82f6;margin-left:4px;">&#9998;</a>
+      </div>`;
+    }
+    html += '</div>';
+  }
+  if (c.dispatch) {
+    const d = c.dispatch;
+    html += `<div class="insp-section"><div class="insp-sub-title">Regla de despacho</div>
+      <div class="insp-meta">
+        <b>T\xedtulo:</b> ${escHtml(d.case_title)}<br>
+        <b>Siguiente:</b> <code>${escHtml(d.next_scene_id)}</code><br>
+        <b>Outcomes:</b> ${d.outcomes.length}
+      </div>`;
+    for (const o of d.outcomes) {
+      html += `<div style="font-size:11px;color:#374151;margin:4px 0 0 8px;">
+        ${badge('dispatch', o.match_type || 'default')} ${escHtml(o.notification)}
+      </div>`;
+    }
+    html += `<div style="margin-top:6px;"><a class="insp-edit-btn" href="${escHtml(d.admin_url)}" target="_blank">&#9998; Editar Dispatch</a></div></div>`;
+  }
+  return html;
+}
+
+function renderCaseFieldInspector(fieldId) {
+  for (const c of DATA.cases) {
+    const f = c.fields.find(f => f.field_id === fieldId);
+    if (f) return `<div class="insp-section">
+      <div class="insp-title">${escHtml(f.field_id)}</div>
+      <div class="insp-id">${badge('input','INPUT FIELD')}</div>
+      <div class="insp-meta">
+        <b>Ruta:</b> <code>${escHtml(f.fact_path)}</code><br>
+        <b>Case:</b> ${escHtml(c.case_id)}<br>
+        ${f.log_template ? `<b>Log:</b> ${escHtml(f.log_template)}<br>` : ''}
+        ${f.notification_label ? `<b>Notificaci\xf3n:</b> ${escHtml(f.notification_label)}` : ''}
+      </div>
+      <div style="margin-top:8px;"><a class="insp-edit-btn" href="${escHtml(f.admin_url)}" target="_blank">&#9998; Editar</a></div>
+    </div>`;
+  }
+  return '';
+}
+
+function renderToolSearchInspector(searchId) {
+  for (const c of DATA.cases) {
+    const t = c.tools.find(t => t.search_id === searchId);
+    if (t) return `<div class="insp-section">
+      <div class="insp-title">${escHtml(t.title)}</div>
+      <div class="insp-id">${badge('toolsearch','TOOL SEARCH')} <code>${escHtml(t.search_id)}</code></div>
+      <div class="insp-meta"><b>Case:</b> ${escHtml(c.case_id)}<br>${t.hint ? `<b>Hint:</b> ${escHtml(t.hint)}` : ''}</div>
+      <div style="margin-top:8px;"><a class="insp-edit-btn" href="${escHtml(t.admin_url)}" target="_blank">&#9998; Editar</a></div>
+    </div>`;
+  }
+  return '';
+}
+
+function renderDispatchInspector(caseId) {
+  return renderCaseInspector(caseId);
+}
+
+function renderProjectInspector() {
+  const p = DATA.project;
+  const openingImg = p.cinema_image_url || '';
+  return `<div class="insp-section">
+    <div class="insp-title">${escHtml(p.name)}</div>
+    <div class="insp-id">${badge('global','GAME PROJECT')}</div>
+    <div class="insp-meta">
+      <b>Escena inicial:</b> <code>${escHtml(p.start_scene_id)}</code><br>
+      <b>Total escenas:</b> ${Object.keys(DATA.scenes).length}<br>
+      <b>Cases:</b> ${DATA.cases.length}<br>
+      <b>Warnings:</b> ${DATA.warnings.length}<br>
+      <b>Pantalla de apertura:</b> ${p.cinema_image ? `<code>${escHtml(p.cinema_image)}</code>` : '<span style="color:#64748b;">(sin imagen)</span>'}
+    </div>
+    ${openingImg ? `
+      <div style="margin-top:8px;">
+        <img src="${escHtml(openingImg)}" alt="Apertura" style="max-width:100%;max-height:170px;border-radius:6px;border:1px solid #334155;object-fit:cover;" onerror="this.style.display='none'">
+      </div>` : ''}
+    <div style="margin-top:8px;"><a class="insp-edit-btn" href="${escHtml(p.admin_url)}" target="_blank">&#9998; Editar Proyecto</a></div>
+  </div>`;
+}
+
+async function createStudioChoice(sceneId, atBeatOverride = null) {
+  try {
+    const anchorEl = document.getElementById(`new-choice-anchor-${sceneId}`);
+    const parsedOverride = Number.parseInt(atBeatOverride, 10);
+    const parsedAnchor = Number.parseInt(anchorEl?.value || '', 10);
+    const maxBeat = (DATA.scenes[sceneId]?.beats || []).length;
+    const atBeat = Number.isInteger(parsedOverride)
+      ? parsedOverride
+      : (Number.isInteger(parsedAnchor) ? parsedAnchor : maxBeat);
+    const payload = {
+      at_beat: Math.max(0, Math.min(maxBeat, atBeat)),
+      prompt: document.getElementById(`new-choice-prompt-${sceneId}`).value.trim(),
+    };
+    const data = await studioRequest(`/studio/api/scene/${DATA.scenes[sceneId].id}/choice/`, 'POST', payload);
+    upsertChoiceRecord(sceneId, data.choice);
+    renderAll();
+    selectNode('scene', sceneId);
+  } catch (err) {
+    studioNotify(err.message || String(err), true);
+  }
+}
+
+async function saveStudioChoice(choiceId, sceneId) {
+  try {
+    const payload = {
+      prompt: document.getElementById(`choice-prompt-${choiceId}`).value.trim(),
+    };
+    const data = await studioRequest(`/studio/api/choice/${choiceId}/`, 'PATCH', payload);
+    upsertChoiceRecord(sceneId, data.choice);
+    renderAll();
+    selectNode('scene', sceneId);
+  } catch (err) {
+    studioNotify(err.message || String(err), true);
+  }
+}
+
+async function moveStudioChoice(choiceId, sceneId, delta) {
+  try {
+    const scene = DATA.scenes[sceneId];
+    const choice = (scene?.choices || []).find(ch => ch.id === choiceId);
+    if (!scene || !choice) throw new Error('Choice no encontrado');
+    const maxBeat = (scene.beats || []).length;
+    const currentAt = Number.parseInt(choice.at_beat, 10) || 0;
+    const nextAt = Math.max(0, Math.min(maxBeat, currentAt + delta));
+    if (nextAt === currentAt) return;
+    const data = await studioRequest(`/studio/api/choice/${choiceId}/`, 'PATCH', { at_beat: nextAt });
+    upsertChoiceRecord(sceneId, data.choice);
+    renderAll();
+    selectNode('scene', sceneId);
+  } catch (err) {
+    studioNotify(err.message || String(err), true);
+  }
+}
+
+async function deleteStudioChoice(choiceId, sceneId) {
+  if (!confirm('Eliminar este choice y sus opciones?')) return;
+  try {
+    await studioRequest(`/studio/api/choice/${choiceId}/`, 'DELETE');
+    removeChoiceRecord(sceneId, choiceId);
+    renderAll();
+    selectNode('scene', sceneId);
+  } catch (err) {
+    studioNotify(err.message || String(err), true);
+  }
+}
+
+async function createStudioChoiceOption(choiceId, sceneId) {
+  try {
+    const gotoSceneId = document.getElementById(`new-option-goto-${choiceId}`).value.trim();
+    const createSceneId = document.getElementById(`new-option-scene-${choiceId}`).value.trim();
+    const payload = {
+      label: document.getElementById(`new-option-label-${choiceId}`).value.trim(),
+    };
+    if (createSceneId) {
+      payload.create_scene = {
+        scene_id: createSceneId,
+        title: document.getElementById(`new-option-title-${choiceId}`).value.trim(),
+        channel: document.getElementById(`new-option-channel-${choiceId}`).value.trim(),
+      };
+    } else {
+      payload.goto_scene_id = gotoSceneId;
+    }
+    const data = await studioRequest(`/studio/api/choice/${choiceId}/option/`, 'POST', payload);
+    if (data.scene) upsertSceneRecord(data.scene);
+    upsertOptionRecord(sceneId, choiceId, data.option);
+    renderAll();
+    selectNode('scene', sceneId);
+  } catch (err) {
+    studioNotify(err.message || String(err), true);
+  }
+}
+
+async function saveStudioChoiceOption(optionId, sceneId, choiceId) {
+  try {
+    const payload = {
+      label: document.getElementById(`opt-label-${optionId}`).value.trim(),
+      goto_scene_id: document.getElementById(`opt-goto-${optionId}`).value.trim(),
+    };
+    const data = await studioRequest(`/studio/api/choice-option/${optionId}/`, 'PATCH', payload);
+    upsertOptionRecord(sceneId, choiceId, data.option);
+    renderAll();
+    selectNode('scene', sceneId);
+  } catch (err) {
+    studioNotify(err.message || String(err), true);
+  }
+}
+
+async function deleteStudioChoiceOption(optionId, sceneId, choiceId) {
+  if (!confirm('Eliminar esta opción?')) return;
+  try {
+    await studioRequest(`/studio/api/choice-option/${optionId}/`, 'DELETE');
+    const scene = DATA.scenes[sceneId];
+    if (scene) {
+      const choice = (scene.choices || []).find(ch => ch.id === choiceId);
+      if (choice) choice.options = (choice.options || []).filter(opt => opt.id !== optionId);
+    }
+    renderAll();
+    selectNode('scene', sceneId);
+  } catch (err) {
+    studioNotify(err.message || String(err), true);
+  }
+}
+
+async function createOptionDestinationScene(optionId, sceneId, choiceId) {
+  try {
+    const newSceneId = document.getElementById(`opt-new-scene-${optionId}`).value.trim();
+    if (!newSceneId) throw new Error('scene_id del destino es obligatorio');
+    const payload = {
+      label: document.getElementById(`opt-label-${optionId}`).value.trim(),
+      create_scene: {
+        scene_id: newSceneId,
+        title: document.getElementById(`opt-new-title-${optionId}`).value.trim(),
+        channel: document.getElementById(`opt-new-channel-${optionId}`).value.trim(),
+      },
+    };
+    const data = await studioRequest(`/studio/api/choice/${choiceId}/option/`, 'POST', payload);
+    if (data.scene) upsertSceneRecord(data.scene);
+    upsertOptionRecord(sceneId, choiceId, data.option);
+    renderAll();
+    selectNode('scene', sceneId);
+  } catch (err) {
+    studioNotify(err.message || String(err), true);
+  }
+}
+
+function renderVignetteInspector(vigId) {
+  const v = DATA.assets.vignettes.find(v => v.vignette_id === vigId);
+  if (!v) return '';
+  return `<div class="insp-section">
+    <div class="insp-title">${escHtml(v.label || v.vignette_id)}</div>
+    <div class="insp-id">${badge('asset','VIGNETTE')} <code>${escHtml(v.vignette_id)}</code></div>
+    <div class="insp-meta"><b>Imagen:</b> <code>${escHtml(v.image)}</code><br>${v.subtitle ? `<b>Subt\xedtulo:</b> ${escHtml(v.subtitle)}` : ''}</div>
+    <div style="margin-top:8px;"><a class="insp-edit-btn" href="${escHtml(v.admin_url)}" target="_blank">&#9998; Editar</a></div>
+  </div>`;
+}
+
+function renderContactInspector(contactId) {
+  const c = DATA.assets.contacts.find(c => c.contact_id === contactId);
+  if (!c) return '';
+  return `<div class="insp-section">
+    <div class="insp-title">${escHtml(c.name)}</div>
+    <div class="insp-id">${badge('asset','CONTACT')} <code>${escHtml(c.contact_id)}</code></div>
+    <div style="margin-top:8px;"><a class="insp-edit-btn" href="${escHtml(c.admin_url)}" target="_blank">&#9998; Editar</a></div>
+  </div>`;
+}
+
+// ============================================================
+// RENDER ALL
+// ============================================================
+function renderAll() {
+  rebuildStudioGraph();
+  renderTree();
+  renderFlow();
+  _applyCanvasTransform();
+  if (selectedNodeId) selectNode(selectedNodeType, selectedNodeId);
+}
+
+// ============================================================
+// INIT
+// ============================================================
+document.addEventListener('DOMContentLoaded', function() {
+  _loadCanvasState();
+  renderAll();
+  _applyCanvasTransform();
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') clearInspector(); });
+  const firstSec = document.getElementById('tb-project');
+  if (firstSec) firstSec.classList.add('open');
+});

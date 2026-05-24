@@ -1,0 +1,14 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Django local artifacts
+authoring/db.sqlite3
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/

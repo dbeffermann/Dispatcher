@@ -1,0 +1,1264 @@
+
+// ═══════════════════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════════════════
+const G = {
+  story: null, scenes: {}, sceneOrder: [],
+  currentSceneId: '', currentScene: {},
+  beatIndex: 0,
+  waitingChoice: false, pendingChoice: null,
+  injectedBeats: [], pendingGoto: null,
+  currentModule: 'chat',
+  emergencyFeed: [], narrationLog: [], personalFeed: [],
+  mapFeed: ['Sistema CCE activo. Sin referencias registradas.'],
+  emergencyUnread: 0, personalUnread: 0, mapUnread: 0, dispatchUnread: 0,
+  pending911: false, last911Text: '', last911Speaker: '',
+  sceneCutPending: false,
+  manualIdx: 0, manualCats: [],
+  globalFacts: { local: '—', address: '—', plate: '—', vehicle: '—', dispatch: '—' },
+  facts: { local: '—', address: '—', plate: '—', vehicle: '—', dispatch: '—' },
+  cases: [], caseById: {}, activeCaseId: null, caseFacts: {},
+  dispatchedUnits: [],
+  cuesSeen: new Set(),
+  inputMode: false, inputField: null, inputAnswer: null, inputSetValue: null, inputHint: '', inputErrorMsg: '',
+  toolMode: null, toolPending: false, _addrQuery: '', _addrSearched: false,
+  dispatchMode: false, selectedUnits: [], toolOpen: false,
+  waContacts: {}, waActive: 'dani',
+  vignettePending: false, gameStarted: false,
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DATA-DRIVEN LOADING
+// Guion y assets pueden vivir fuera de este HTML.
+// Si abres el archivo directo y fetch falla, se usa el fallback embebido.
+// ═══════════════════════════════════════════════════════════════════════════
+const DATA_URLS = {
+  story: 'data/dispatcher_story.json',
+  assets: 'data/dispatcher_assets.json'
+};
+
+let STORY_DATA = null;
+const DEFAULT_ASSET_DATA = {
+  audio: { music: {}, sfx: {} },
+  vignettes: {},
+  cinema: {},
+  contacts: {},
+  whatsapp: {}
+};
+let ASSET_DATA = JSON.parse(JSON.stringify(DEFAULT_ASSET_DATA));
+
+function deepMerge(base, extra) {
+  if (!extra || typeof extra !== 'object') return base;
+  const out = Array.isArray(base) ? [...base] : { ...base };
+  for (const [k, v] of Object.entries(extra)) {
+    if (v && typeof v === 'object' && !Array.isArray(v)) out[k] = deepMerge(out[k] || {}, v);
+    else out[k] = v;
+  }
+  return out;
+}
+
+async function loadJsonMaybe(url) {
+  try {
+    const res = await fetch(url, { cache: 'no-store' });
+    if (!res.ok) throw new Error(res.status + ' ' + res.statusText);
+    return await res.json();
+  } catch (err) {
+    console.warn('[Dispatcher] No se pudo cargar ' + url + '. Usando fallback si existe.', err);
+    return null;
+  }
+}
+
+async function boot() {
+  const story = await loadJsonMaybe(DATA_URLS.story);
+  const assets = await loadJsonMaybe(DATA_URLS.assets);
+  if (story) STORY_DATA = story;
+  else STORY_DATA = DEFAULT_STORY_DATA;
+  ASSET_DATA = deepMerge(DEFAULT_ASSET_DATA, assets || {});
+  init();
+}
+
+function setPath(root, path, value) {
+  if (!path) return;
+  const parts = path.split('.').filter(Boolean);
+  let obj = root;
+  for (let i = 0; i < parts.length - 1; i++) {
+    const k = parts[i];
+    if (!obj[k] || typeof obj[k] !== 'object') obj[k] = {};
+    obj = obj[k];
+  }
+  obj[parts[parts.length - 1]] = value;
+}
+
+function applyTemplate(s, vars) {
+  return String(s || '').replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
+}
+
+function defaultFacts() {
+  return { local: '—', address: '—', plate: '—', vehicle: '—', dispatch: '—' };
+}
+
+function activeCase() {
+  return G.activeCaseId ? (G.caseById[G.activeCaseId] || null) : null;
+}
+
+function setActiveCase(caseId) {
+  if (!caseId || !G.caseById[caseId]) return;
+  if (!G.caseFacts[caseId]) {
+    G.caseFacts[caseId] = { ...defaultFacts(), ...((G.caseById[caseId] || {}).initial_facts || {}) };
+  }
+  G.activeCaseId = caseId;
+  G.facts = G.caseFacts[caseId];
+}
+
+function getCaseFields() {
+  const c = activeCase();
+  return { ...(G.story.case_fields || {}), ...((c && c.case_fields) || {}) };
+}
+
+function getToolSearch() {
+  const c = activeCase();
+  return { ...(G.story.tool_search || {}), ...((c && c.tool_search) || {}) };
+}
+
+function getDispatchRules() {
+  const c = activeCase();
+  return (c && c.dispatch_rules) || G.story.dispatch_rules || {};
+}
+
+function getToolConfig(toolKey) {
+  return (getToolSearch() || {})[toolKey] || {};
+}
+
+function setFactValue(key, value) {
+  if (!key) return;
+  if (key.includes('.')) setPath(G, key, value);
+  else G.facts[key] = value;
+}
+
+let EMERGENCY_SCENES = new Set();
+
+// ═══════════════════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════════════════
+function init() {
+  G.story = STORY_DATA || DEFAULT_STORY_DATA;
+  G.scenes = {};
+  G.sceneOrder = [];
+  G.cases = G.story.cases || [];
+  G.caseById = {};
+  G.cases.forEach(c => { if (c && c.id) G.caseById[c.id] = c; });
+  G.caseFacts = {};
+  G.activeCaseId = null;
+  G.globalFacts = defaultFacts();
+  G.facts = G.globalFacts;
+  G.manualCats = G.story.manual_categories || [];
+  (G.story.scenes || []).forEach(s => { G.scenes[s.id] = s; G.sceneOrder.push(s.id); });
+  const explicitEmergency = G.story.emergency_scenes || [];
+  const sceneEmergency = (G.story.scenes || [])
+    .filter(s => s.channel === '911' || s.emergency === true)
+    .map(s => s.id);
+  EMERGENCY_SCENES = new Set([...explicitEmergency, ...sceneEmergency]);
+  G.currentSceneId = G.story.start || G.sceneOrder[0] || '';
+  G.currentScene = G.scenes[G.currentSceneId] || {};
+  initWA();
+  addNarr('n-scene', '— DISPATCHER —  por kabu studio');
+  addNarr('n-line',  'Noche otoñal. Las 21:11.');
+  showCinematic();
+}
+
+function startGame() {
+  G.gameStarted = true;
+  closeCinematic();
+  AUDIO.sfx('inicio');
+  AUDIO.startAmbient('rain');
+  setTimeout(() => enterScene(G.currentSceneId), 900);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SCENE MANAGEMENT
+// ═══════════════════════════════════════════════════════════════════════════
+function enterScene(id) {
+  if (!G.scenes[id]) { addNarr('n-alert','Error: escena no encontrada.'); return; }
+  G.currentSceneId = id;
+  G.currentScene   = G.scenes[id];
+  if (G.currentScene.case_id) setActiveCase(G.currentScene.case_id);
+  G.beatIndex      = 0;
+  G.waitingChoice  = false;
+  G.pendingChoice  = null;
+  G.injectedBeats  = [];
+  G.pendingGoto    = null;
+  G.sceneCutPending= true;
+  G.cuesSeen       = new Set();
+  G.toolMode = null; G.toolPending = false; G.toolOpen = false;
+  G._addrQuery = ''; G._addrSearched = false;
+  G.dispatchMode = false; G.selectedUnits = [];
+  // Auto-switch to Canal 911 for emergency scenes
+  if (EMERGENCY_SCENES.has(id)) {
+    G.currentModule   = 'chat';
+    G.emergencyUnread = 0;
+    G.pending911      = false;
+    hideToast();
+  }
+  addNarr('n-scene', '— ' + (G.currentScene.title || id) + ' —');
+  if (G.currentScene.case_id && activeCase()) {
+    const c = activeCase();
+    if (id === c.start_scene || id === 'investigation') addNarr('n-cue', '🗂  Caso activo: ' + (c.title || c.id) + '. Revisa el Manual si corresponde [M].');
+  }
+  document.getElementById('hdr-scene').textContent = G.currentScene.title || id;
+  refreshUI();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ADVANCE
+// ═══════════════════════════════════════════════════════════════════════════
+function advance() {
+  if (G.waitingChoice)   return;
+  if (!G.gameStarted)    return;
+  if (G.inputMode)       { refreshUI(); return; }
+  if (G.toolPending)     { refreshUI(); return; }
+  if (G.dispatchMode)    { refreshUI(); return; }
+  if (G.vignettePending) { refreshUI(); return; }
+
+  if (needsWhatsApp()) {
+    cueOnce('wp_gate','n-cue','📱 Tu celular vibra. Lee el mensaje de Dani antes de continuar [W].');
+    refreshUI(); return;
+  }
+
+  if (G.sceneCutPending) {
+    G.sceneCutPending = false;
+    doFade(() => refreshUI());
+    return;
+  }
+
+  if (G.injectedBeats.length > 0) {
+    const b = G.injectedBeats.shift();
+    pushBeat(b);
+    if (G.inputMode)   { refreshUI(); return; }
+    if (G.toolPending) { refreshUI(); return; }
+    if (G.dispatchMode){ refreshUI(); return; }
+    if (G.injectedBeats.length === 0 && G.pendingGoto) {
+      const g = G.pendingGoto; G.pendingGoto = null; enterScene(g);
+    } else refreshUI();
+    return;
+  }
+
+  const beats = G.currentScene.beats || [];
+  if (G.beatIndex < beats.length) {
+    const b = beats[G.beatIndex++];
+    pushBeat(b);
+    if (G.inputMode)   { refreshUI(); return; }
+    if (G.toolPending) { refreshUI(); return; }
+    if (G.dispatchMode){ refreshUI(); return; }
+    const ch = findChoice(G.beatIndex);
+    if (ch) {
+      G.waitingChoice = true;
+      G.pendingChoice = ch;
+      addNarr('n-prompt', '❓ ' + (ch.prompt || 'Elige una opción'));
+    }
+    refreshUI(); return;
+  }
+
+  // Check for choices that fire at end-of-beats (e.g. after an input beat was last)
+  const chEnd = findChoice(G.beatIndex);
+  if (chEnd) {
+    G.waitingChoice = true;
+    G.pendingChoice = chEnd;
+    addNarr('n-prompt', '❓ ' + (chEnd.prompt || 'Elige una opción'));
+    refreshUI(); return;
+  }
+  const nxt = G.currentScene.next;
+  if (typeof nxt === 'string' && nxt) { enterScene(nxt); }
+  else { addNarr('n-end','— Fin de la reproducción —'); refreshUI(); }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BEAT ROUTING
+// ═══════════════════════════════════════════════════════════════════════════
+function pushBeat(beat) {
+  if (!beat || typeof beat !== 'object') return;
+  const kind = beat.kind || 'line';
+  // ── INPUT BEAT: pause narrative, show form ────────────────────────────────
+  if (kind === 'input') {
+    G.inputMode     = true;
+    G.inputField    = beat.field     || '';
+    G.inputAnswer   = beat.answer    || '';
+    G.inputSetValue = beat.setValue  || '';
+    G.inputHint     = beat.hint      || 'Registra el dato del incidente';
+    G.inputErrorMsg = beat.errorMsg  || '';
+    addNarr('n-prompt', '📋 ' + G.inputHint);
+    return;
+  }
+  // ── DISPATCH BEAT ─────────────────────────────────────────────────────────────
+  if (kind === 'dispatch') {
+    G.dispatchMode  = true;
+    G.selectedUnits = [];
+    G.dispatchUnread++;
+    addNarr('n-cue', '🚔 Seleccioná las unidades a enviar. Abrí la Consola de Despacho [D].');
+    return;
+  }
+  // ── TOOL-SEARCH BEAT: open interactive search tool in Map ─────────────────────
+  if (kind === 'tool-search') {
+    G.toolMode    = beat.tool || 'address';
+    G.toolPending = true;
+    G.toolOpen    = false;
+    const toolMsgs = {
+      address: '📍 Buscá la dirección del local en el panel Mapa [P].',
+      vehicle: '🔍 Identificá el modelo BMW en el panel Mapa [P].'
+    };
+    addNarr('n-prompt', toolMsgs[beat.tool] || '📍 Abrí el Mapa para completar la búsqueda.');
+    G.mapUnread++;
+    return;
+  }
+  if (kind === 'sfx')     { AUDIO.sfx(beat.sfx || 'notif'); return; }
+  if (kind === 'ambient') { beat.stop ? AUDIO.stopAmbient() : AUDIO.startAmbient(beat.ambient || 'rain'); return; }
+  if (kind === 'vignette') {
+    G.vignettePending = true;
+    if (beat.ambient) AUDIO.startAmbient(beat.ambient);
+    showVignette(beat.scene || 'arrival', () => { G.vignettePending = false; advance(); });
+    return;
+  }
+  if (kind === 'wa') {
+    const cid = beat.contact || 'dani';
+    const c   = G.waContacts[cid];
+    if (c) {
+      c.messages.push({ speaker: beat.speaker || cid, text: beat.text || '', mediaType: beat.mediaType, url: beat.url, caption: beat.caption, name: beat.name, dur: beat.dur });
+      if (G.currentModule !== 'personal' || G.waActive !== cid) { c.unread++; G.personalUnread++; }
+      refreshUI();
+    }
+    return;
+  }
+  const text    = (beat.text || '').trim();
+  if (!text) return;
+  const speaker = beat.speaker || null;
+  const isPersonal  = speaker === 'DANI' || (G.currentSceneId === 'dani_chat' && speaker === 'ERIC');
+  const inEmergency = EMERGENCY_SCENES.has(G.currentSceneId);
+  const isIncoming  = speaker === 'MENSAJE' || speaker === 'MIRNA';
+
+  if (kind === 'narration' || !speaker) {
+    addNarr('n-line', text);
+    const lo = text.toLowerCase();
+    if (lo.includes('mapa') && lo.includes('parpade'))
+      cueOnce('map_cue','n-cue','🗺  El mapa parpadea en pantalla. Ábrelo para ver la dirección [P].');
+    if (lo.includes('icono web') || lo.includes('ícono web'))
+      cueOnce('web_cue','n-cue','🌐 Buscador web activo. Eric busca el modelo BMW en línea.');
+    if (lo.includes('iconos parpadean'))
+      cueOnce('dispatch_cue','n-cue','🚔 Pestaña Despacho activa. Elige las unidades a enviar [D].');
+  } else if (isPersonal) {
+    G.personalFeed.push({ speaker, text, mediaType: beat.mediaType, url: beat.url, caption: beat.caption, name: beat.name, dur: beat.dur });
+    if (G.personalFeed.length > 120) G.personalFeed.shift();
+    if (G.currentModule !== 'personal') {
+      G.personalUnread++;
+      cueOnce('wp_cue','n-cue','📱 Dani te escribió. Abre WhatsApp [W].');
+    }
+  } else if (inEmergency) {
+    G.emergencyFeed.push({ speaker, text, mediaType: beat.mediaType, url: beat.url, caption: beat.caption, name: beat.name, dur: beat.dur });
+    if (G.emergencyFeed.length > 120) G.emergencyFeed.shift();
+    if (isIncoming && G.currentModule !== 'chat') {
+      G.emergencyUnread++;
+      G.pending911 = true;
+      G.last911Text    = text.slice(0, 90);
+      G.last911Speaker = speaker;
+      showToast(speaker, G.last911Text);
+      cueOnce('e911_cue','n-alert','🚨 Llamada entrante en Canal 911. Atiende ahora [C].');
+    }
+  } else {
+    addNarr('n-line', speaker + ': ' + text);
+  }
+  extractFacts(beat);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// INPUT VALIDATION
+// ═══════════════════════════════════════════════════════════════════════════
+function showNotif(label, value) {
+  const area = document.getElementById('notif-area');
+  if (!area) return;
+  const el = document.createElement('div');
+  el.className = 'notif';
+  el.innerHTML = '<div class="notif-lbl">▸ ' + esc(label) + '</div><div class="notif-val">' + esc(value) + '</div>';
+  area.appendChild(el);
+  setTimeout(() => {
+    el.style.animation = 'notif-out .3s ease forwards';
+    setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, 300);
+  }, 3800);
+}
+
+function escAttr(s) { return (s||'').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+
+function normalizeStr(s) {
+  return (s||'').toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/[\s\-\.]/g,'').trim();
+}
+
+function matchAnswer(input, expected) {
+  const ni = normalizeStr(input);
+  const ne = normalizeStr(expected);
+  return ni.includes(ne) || ne.includes(ni);
+}
+
+function submitInput() {
+  const el = document.getElementById('inp-answer');
+  if (el) resolveInput(el.value);
+}
+
+function resolveInput(val) {
+  if (!G.inputMode) return;
+  const trimmed = (val || '').trim();
+  if (!trimmed) return;
+  if (!matchAnswer(trimmed, G.inputAnswer)) {
+    const errMsg = G.inputErrorMsg || '❌ No coincide. Revisa lo que dijo la persona en la llamada e inténtalo de nuevo.';
+    addNarr('n-alert', errMsg);
+    const el = document.getElementById('inp-answer');
+    if (el) { el.value = ''; el.focus(); }
+    return;
+  }
+  G.inputMode = false;
+  const fld = G.inputField;
+  const setVal = G.inputSetValue || trimmed;
+  const cfg = (getCaseFields() || {})[fld] || {};
+  if (cfg.factPath) setPath(G, cfg.factPath, setVal);
+  else if (fld && G.facts) G.facts[fld] = setVal;
+
+  const logLine = cfg.logTemplate ? applyTemplate(cfg.logTemplate, { value: setVal, field: fld }) : ('✔ ' + fld + ': ' + setVal);
+  G.mapFeed.push(logLine);
+  if (G.currentModule !== 'map') G.mapUnread++;
+
+  showNotif(cfg.notificationLabel || 'DATO REGISTRADO', setVal);
+  G.inputField = null; G.inputAnswer = null; G.inputSetValue = null; G.inputHint = ''; G.inputErrorMsg = '';
+  advance();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CHOICES
+// ═══════════════════════════════════════════════════════════════════════════
+function findChoice(at) {
+  return (G.currentScene.choices || []).find(c => c.at === at) || null;
+}
+
+function resolveChoice(idx) {
+  if (!G.waitingChoice || !G.pendingChoice) return;
+  const opts = G.pendingChoice.options || [];
+  if (idx < 0 || idx >= opts.length) return;
+  const picked = opts[idx];
+  addNarr('n-chosen', '↳ ' + (picked.label || 'Opción ' + (idx+1)));
+  G.injectedBeats = (picked.beats || []).filter(b => b && typeof b === 'object');
+  G.waitingChoice = false;
+  G.pendingChoice = null;
+  G.pendingGoto   = picked.goto || null;
+  // Auto-switch to Canal 911 when choice beats happen in emergency context
+  if (EMERGENCY_SCENES.has(G.currentSceneId) && G.injectedBeats.length > 0) {
+    G.currentModule   = 'chat';
+    G.emergencyUnread = 0;
+    G.pending911      = false;
+    hideToast();
+  }
+  if (G.injectedBeats.length > 0) { advance(); return; }
+  if (G.pendingGoto) { const g = G.pendingGoto; G.pendingGoto = null; enterScene(g); return; }
+  refreshUI();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EXTRACT CASE FACTS
+// ═══════════════════════════════════════════════════════════════════════════
+function extractFacts(beat) {
+  const lo = (beat && beat.text ? beat.text : '').toLowerCase();
+  if (!lo) return;
+  if (beat.speaker === 'ERIC' && lo.includes('carabineros') && lo.includes('seguridad') && G.facts.dispatch === '—') {
+    G.facts.dispatch = 'Carabineros + Seguridad Ciudadana';
+    ['Carabineros','Seguridad Ciudadana'].forEach(u => {
+      if (!G.dispatchedUnits.includes(u)) G.dispatchedUnits.push(u);
+    });
+    if (G.currentModule !== 'dispatch') G.dispatchUnread++;
+  } else if (beat.speaker === 'ERIC' && lo.includes('carabineros') && G.facts.dispatch === '—') {
+    G.facts.dispatch = 'Carabineros';
+    if (!G.dispatchedUnits.includes('Carabineros')) G.dispatchedUnits.push('Carabineros');
+    if (G.currentModule !== 'dispatch') G.dispatchUnread++;
+  }
+  if (G.mapFeed.length > 40) G.mapFeed = G.mapFeed.slice(-40);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// UI REFRESH
+// ═══════════════════════════════════════════════════════════════════════════
+function refreshUI() {
+  refreshModBar();
+  renderPanel();
+  refreshControls();
+  refreshStatus();
+}
+
+function refreshModBar() {
+  const defs = {
+    chat:     { lbl: 'Canal 911',  id: 'mb-chat' },
+    manual:   { lbl: 'Manual',     id: 'mb-manual' },
+    map:      { lbl: 'Mapa',       id: 'mb-map' },
+    dispatch: { lbl: 'Despacho',   id: 'mb-dispatch' },
+    personal: { lbl: 'WhatsApp',   id: 'mb-personal' },
+  };
+  for (const [mod, cfg] of Object.entries(defs)) {
+    const btn = document.getElementById(cfg.id);
+    btn.className = 'mbtn' + (mod === G.currentModule ? ' active' : '');
+    let lbl = cfg.lbl;
+    if (mod === 'chat' && G.emergencyUnread > 0 && G.currentModule !== 'chat') {
+      lbl = '🚨 911 (' + G.emergencyUnread + ')';
+      btn.className += ' req-911';
+    }
+    if (mod === 'personal' && G.personalUnread > 0 && G.currentModule !== 'personal') {
+      lbl = '📱 WA (' + G.personalUnread + ')';
+      if (G.currentSceneId === 'dani_chat') btn.className += ' req-wp';
+    }
+    if (mod === 'map' && G.mapUnread > 0 && G.currentModule !== 'map') {
+      lbl = '🗺 Mapa (' + G.mapUnread + ')';
+      btn.className += ' req-update';
+    }
+    if (mod === 'dispatch' && G.dispatchUnread > 0 && G.currentModule !== 'dispatch') {
+      lbl = '🚔 Despacho (' + G.dispatchUnread + ')';
+      btn.className += ' req-update';
+    }
+    btn.textContent = lbl;
+  }
+}
+
+function renderPanel() {
+  const el = document.getElementById('panel-content');
+  if      (G.currentModule === 'chat')     el.innerHTML = htmlEmergency();
+  else if (G.currentModule === 'personal') el.innerHTML = htmlWhatsApp();
+  else if (G.currentModule === 'manual')   el.innerHTML = htmlManual();
+  else if (G.currentModule === 'map')      el.innerHTML = htmlMap();
+  else if (G.currentModule === 'dispatch') el.innerHTML = htmlDispatch();
+  // auto-scroll feeds
+  ['e-feed','wp-msgs','mp-activity'].forEach(id => {
+    const f = document.getElementById(id); if (f) f.scrollTop = f.scrollHeight;
+  });
+}
+
+// ── PANEL: EMERGENCY 911 ──
+function htmlEmergency() {
+  const active = G.emergencyFeed.length > 0 || EMERGENCY_SCENES.has(G.currentSceneId);
+  const rows = G.emergencyFeed.length > 0
+    ? G.emergencyFeed.slice(-30).map(m => {
+        const isInc = m.speaker === 'MENSAJE' || m.speaker === 'MIRNA';
+        const name  = isInc ? (m.speaker === 'MENSAJE' ? 'LLAMADA' : m.speaker) : 'ERIC';
+        const cls   = isInc ? 'el-bubble-in' : 'el-bubble-out';
+        return `<div class="${cls}"><div class="el-bname">${esc(name)}</div><div class="el-btext">${renderMediaContent(m)}</div></div>`;
+      }).join('')
+    : '<div class="el-sys">En espera de comunicaciones…</div>';
+  return `<div class="ep-wrap">
+    <div class="ep-head"><span class="dot${active?' blink':''}"></span>CANAL 911 — CCE-01 / TURNO NOCHE<span style="margin-left:auto;font-size:10px;opacity:.5">ACTIVO</span></div>
+    <div id="e-feed">${rows}</div>
+  </div>`;
+}
+
+function renderMediaContent(m) {
+  if (!m || !m.mediaType) return esc(m ? m.text || '' : '');
+  let out = m.text ? `<div>${esc(m.text)}</div>` : '';
+  if (m.mediaType === 'image') {
+    out += `<div class="media-img">${m.url ? `<img src="${escAttr(m.url)}" style="width:100%;height:100%;object-fit:cover" alt="imagen">` : '📷'}</div>`;
+    if (m.caption) out += `<div class="media-caption">${esc(m.caption)}</div>`;
+  } else if (m.mediaType === 'voice') {
+    const h = [4,7,5,9,6,8,4,11,7,5,9,6,8,5,7,4,10,6,8,5];
+    const bars = h.map(v => `<div class="media-voice-bar" style="height:${v}px"></div>`).join('');
+    out += `<div class="media-voice"><span>🎤</span><div class="media-voice-bars">${bars}</div><span class="media-voice-dur">${esc(m.dur||'0:00')}</span></div>`;
+  } else if (m.mediaType === 'file') {
+    const icon = /pdf/i.test(m.name||'') ? '📄' : /xls|csv/i.test(m.name||'') ? '📊' : '📎';
+    out += `<div class="media-file"><span class="media-file-icon">${icon}</span><div class="media-file-info"><div class="media-file-name">${esc(m.name||'archivo')}</div><div class="media-file-size">${esc(m.size||'')}</div></div></div>`;
+  }
+  return out;
+}
+
+// ── PANEL: WHATSAPP ──
+function htmlWhatsApp() {
+  const contacts    = Object.entries(G.waContacts);
+  const activeData  = G.waContacts[G.waActive] || contacts[0]?.[1];
+  const msgs        = activeData ? activeData.messages : G.personalFeed;
+  const bubbles     = msgs.length > 0
+    ? msgs.slice(-40).map(m => {
+        const sent = m.speaker === 'ERIC';
+        return `<div class="bubble ${sent?'sent':'recv'}">
+          <div class="bubble-name">${esc(m.speaker)}</div>${renderMediaContent(m)}</div>`;
+      }).join('')
+    : '<div style="color:var(--text-dim);font-size:13px;text-align:center;padding-top:40px">Sin mensajes todavía</div>';
+  const contactTabs = contacts.map(([id, c]) => {
+    const isAct = id === G.waActive;
+    const badge = c.unread > 0 ? `<div class="wp-badge">${c.unread}</div>` : '';
+    return `<div class="wp-contact${isAct?' active':''}" onclick="setWaActive('${escAttr(id)}')">
+      <div class="wp-contact-av" style="background:${c.color}">${esc(c.avatar)}</div>
+      <div class="wp-contact-name">${esc(c.name)}</div>
+      ${badge}
+    </div>`;
+  }).join('');
+  const head = activeData ? `
+    <div class="wp-head">
+      <div class="wp-av" style="background:${activeData.color}">${esc(activeData.avatar)}</div>
+      <div><div class="wp-name" style="color:${activeData.color}">${esc(activeData.name)}</div><div class="wp-sub">${esc(activeData.status||'')}</div></div>
+    </div>` : '';
+  return `<div class="wp-container">
+    <div class="wp-sidebar">${contactTabs}</div>
+    <div class="wp-chat-area">
+      <div class="wp-wrap" style="height:100%">
+        ${head}
+        <div id="wp-msgs">${bubbles}</div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function setWaActive(id) {
+  G.waActive = id;
+  const c = G.waContacts[id];
+  if (c) { G.personalUnread = Math.max(0, G.personalUnread - c.unread); c.unread = 0; }
+  renderPanel();
+}
+
+// ── PANEL: MANUAL ──
+function htmlManual() {
+  if (!G.manualCats.length) return '<div style="padding:20px;color:var(--text-dim)">Manual no disponible.</div>';
+  const cat = G.manualCats[G.manualIdx];
+  const total = G.manualCats.length;
+  const keys  = (cat.keys  || []).map(k => `<span class="mn-key">${esc(k)}</span>`).join('');
+  const steps = (cat.steps || []).map((s,i) =>
+    `<div class="mn-step"><span class="mn-num">${i+1}</span>${esc(s)}</div>`).join('');
+  const avoid = (cat.avoid || []).map(a => `<div class="mn-avoid">✕  ${esc(a)}</div>`).join('');
+  const idx   = G.manualCats.map((c,i) =>
+    `<div class="mn-idx-item${i===G.manualIdx?' active':''}" onclick="jumpCat(${i})">${esc(c.name)}</div>`).join('');
+  return `<div class="mn-wrap">
+    <div class="mn-nav">
+      <button class="mn-btn" onclick="prevCat()">◀ Anterior</button>
+      <div class="mn-counter">${G.manualIdx+1} / ${total}</div>
+      <button class="mn-btn" onclick="nextCat()">Siguiente ▶</button>
+    </div>
+    <div class="mn-card">
+      <div class="mn-name">${esc(cat.name)}</div>
+      <div class="mn-keys">${keys}</div>
+      <div class="mn-sec">Cuándo usar</div>
+      <div style="font-size:13px;color:var(--text-dim);line-height:1.6">${esc(cat.when||'')}</div>
+      <div class="mn-sec">Pasos</div>${steps}
+      <div class="mn-sec">Evitar</div>${avoid}
+      <div class="mn-dispatch"><strong>Despacho recomendado:</strong> ${esc(cat.dispatch||'')}</div>
+      <div class="mn-idx"><div class="mn-idx-h">Índice rápido</div>${idx}</div>
+    </div>
+  </div>`;
+}
+function prevCat() { G.manualIdx = (G.manualIdx - 1 + G.manualCats.length) % G.manualCats.length; renderPanel(); }
+function nextCat() { G.manualIdx = (G.manualIdx + 1) % G.manualCats.length; renderPanel(); }
+function jumpCat(i) { G.manualIdx = i; renderPanel(); }
+
+// ── PANEL: MAP ──
+function htmlMap() {
+  if (G.toolMode && !G.toolOpen) return htmlMapAppLauncher();
+  const cfg = getToolConfig(G.toolMode);
+  if (G.toolMode && G.toolOpen && cfg.models) return htmlMapVehicleTool();
+  if (G.toolMode && G.toolOpen) return htmlMapAddressTool();
+  const rows = G.mapFeed.slice(-14).map(e => `<div class="mp-event">${esc(e)}</div>`).join('')
+    || '<div class="mp-event" style="opacity:.4">Sin actividad registrada</div>';
+  return `<div class="mp-wrap">
+    <div class="mp-head">Monitor de Ubicaciones — CCE${activeCase() ? ' · ' + esc(activeCase().title || activeCase().id) : ''}</div>
+    <div class="mp-facts">
+      <div class="mp-fact"><label>Local</label><span>${esc(G.facts.local || '—')}</span></div>
+      <div class="mp-fact"><label>Dirección</label><span>${esc(G.facts.address || '—')}</span></div>
+      <div class="mp-fact"><label>Patente</label><span>${esc(G.facts.plate || '—')}</span></div>
+      <div class="mp-fact"><label>Vehículo</label><span>${esc(G.facts.vehicle || '—')}</span></div>
+    </div>
+    <div class="mp-log" id="mp-activity">${rows}</div>
+  </div>`;
+}
+
+function currentToolResultFound(q, cfg) {
+  const pats = cfg.match_patterns || [];
+  if (!pats.length) return !!q;
+  const nq = normalizeStr(q);
+  return pats.some(p => nq.includes(normalizeStr(p)));
+}
+
+function htmlMapAddressTool() {
+  const cfg      = getToolConfig(G.toolMode);
+  const q        = G._addrQuery || '';
+  const searched = G._addrSearched || false;
+  const found    = searched && currentToolResultFound(q, cfg);
+  const noResult = searched && !found;
+  const r        = cfg.result || {};
+  return `<div class="mp-wrap">
+    <div class="mp-head">${esc(cfg.title || '🗺 Buscador')}</div>
+    <div class="tool-wrap">
+      <div class="tool-hint">${esc(cfg.hint || 'Busca y confirma el dato solicitado.')}</div>
+      <div class="tool-search-row">
+        <input id="tool-addr-inp" class="tool-search-inp" type="text"
+          placeholder="${escAttr(cfg.placeholder || 'Buscar...')}"
+          value="${escAttr(q)}"
+          onkeydown="if(event.key==='Enter') runAddressSearch()" />
+        <button class="tool-search-btn" onclick="runAddressSearch()">BUSCAR</button>
+      </div>
+      ${found ? `<div class="tool-result">
+        <div class="tool-result-name">${esc(r.name || 'Resultado encontrado')}</div>
+        <div class="tool-result-addr">${esc(r.address || '')}</div>
+        <div style="font-size:11px;color:var(--text-dim);margin-bottom:10px">${esc(r.description || 'Resultado verificado')}</div>
+        <button class="tool-confirm" onclick="confirmAddress()">✔ CONFIRMAR</button>
+      </div>` : ''}
+      ${noResult ? `<div class="tool-no-result">Sin resultados. Revisa la pista y vuelve a intentar.</div>` : ''}
+    </div>
+  </div>`;
+}
+
+function htmlMapVehicleTool() {
+  const cfg = getToolConfig(G.toolMode);
+  const models = cfg.models || [];
+  const cards = models.map(m =>
+    `<div class="model-card" onclick="selectVehicleModel('${escAttr(m.name || '')}')">
+      <div class="model-info">
+        <div class="model-name">🚗 ${esc(m.name || 'Modelo')} <span class="model-sub">${esc(m.type || '')}</span>${m.badge ? ` <span class="model-badge">${esc(m.badge)}</span>` : ''}</div>
+        <div class="model-sub">${esc(m.note || '')}</div>
+        <div class="model-price">${esc(m.price || '')}</div>
+      </div>
+      <button class="model-btn">REGISTRAR</button>
+    </div>`).join('') || '<div class="tool-no-result">No hay modelos configurados para esta herramienta.</div>';
+  return `<div class="mp-wrap">
+    <div class="mp-head">${esc(cfg.title || '🔍 Catálogo')}</div>
+    <div class="tool-wrap">
+      <div class="tool-hint">${esc(cfg.hint || 'Selecciona el resultado correcto.')}</div>
+      <div class="model-list">${cards}</div>
+    </div>
+  </div>`;
+}
+
+function htmlMapAppLauncher() {
+  const cfg = getToolConfig(G.toolMode);
+  const isCatalog = !!cfg.models;
+  return `<div class="mp-wrap">
+    <div class="mp-head">Sistema de Apoyo — CCE</div>
+    <div class="map-apps">
+      <div class="tool-hint" style="padding:0 0 6px">Herramienta requerida para el caso activo</div>
+      <div class="map-app-card required" onclick="openMapTool()">
+        <span class="map-app-icon">${isCatalog ? '&#x1F50D;' : '&#x1F4CD;'}</span>
+        <div class="map-app-info">
+          <div class="map-app-name">${esc(cfg.title || 'Herramienta de búsqueda')}</div>
+          <div class="map-app-desc">${esc(cfg.hint || 'Abrir herramienta para continuar')}</div>
+        </div>
+        <span class="map-app-badge">REQUERIDO</span>
+      </div>
+    </div>
+  </div>`;
+}
+
+function openMapTool() {
+  if (!G.toolMode || !G.toolPending) return;
+  G.toolOpen = true;
+  renderPanel();
+}
+
+function runAddressSearch() {
+  const el = document.getElementById('tool-addr-inp');
+  if (!el) return;
+  G._addrQuery    = el.value.trim();
+  G._addrSearched = true;
+  renderPanel();
+  setTimeout(() => { const inp = document.getElementById('tool-addr-inp'); if (inp) inp.focus(); }, 40);
+}
+
+function confirmAddress() {
+  if (!G.toolMode) return;
+  const cfg = getToolConfig(G.toolMode);
+  const r = cfg.result || {};
+  G.toolMode = null; G.toolPending = false; G.toolOpen = false;
+  G._addrQuery = ''; G._addrSearched = false;
+  Object.entries(r.setFacts || {}).forEach(([k,v]) => setFactValue(k, v));
+  if (r.mapLog) G.mapFeed.push(r.mapLog);
+  showNotif(r.notificationLabel || 'DATO CONFIRMADO', r.notificationValue || r.address || r.name || 'OK');
+  G.currentModule = 'chat';
+  advance();
+}
+
+function selectVehicleModel(model) {
+  if (!G.toolMode) return;
+  const cfg = getToolConfig(G.toolMode);
+  const factKey = cfg.model_fact || 'vehicle';
+  G.toolMode = null; G.toolPending = false; G.toolOpen = false;
+  setFactValue(factKey, model);
+  G.mapFeed.push((cfg.modelLogTemplate || 'Modelo identificado: {value}').replace('{value}', model));
+  showNotif(cfg.modelNotificationLabel || 'MODELO IDENTIFICADO', model);
+  G.currentModule = 'chat';
+  advance();
+}
+
+function toggleUnit(uid) {
+  if (!G.dispatchMode) return;
+  const i = G.selectedUnits.indexOf(uid);
+  if (i >= 0) G.selectedUnits.splice(i, 1); else G.selectedUnits.push(uid);
+  renderPanel();
+}
+
+function matchDispatchOutcome(units, rules) {
+  const outcomes = rules.outcomes || [];
+  const required = rules.required_units || [];
+  const set = new Set(units);
+  for (const o of outcomes) {
+    if (o.match === 'all_required' && required.length && required.every(u => set.has(u)) && units.length === required.length) return o;
+    if (o.match === 'contains_required' && required.length && required.every(u => set.has(u))) return o;
+    if (Array.isArray(o.match_units)) {
+      const sameLen = o.match_units.length === units.length;
+      const sameUnits = o.match_units.every(u => set.has(u));
+      if (sameLen && sameUnits) return o;
+    }
+  }
+  return outcomes.find(o => o.match === 'fallback') || { notification:'DESPACHO REGISTRADO', beats:[] };
+}
+
+function confirmDispatch() {
+  if (!G.dispatchMode || G.selectedUnits.length === 0) return;
+  const rules = getDispatchRules();
+  const units = [...G.selectedUnits];
+  const label = units.join(' + ');
+  const outcome = matchDispatchOutcome(units, rules);
+
+  G.dispatchedUnits = units;
+  G.dispatchMode  = false;
+  G.selectedUnits = [];
+  G.facts.dispatch = label + ' — En camino';
+  G.mapFeed.push('Despacho: ' + label);
+  showNotif(outcome.notification || 'UNIDADES DESPACHADAS', label);
+
+  G.injectedBeats = (outcome.beats || []).map(b => {
+    const copy = { ...b };
+    if (copy.text) copy.text = applyTemplate(copy.text, { label, units: label });
+    return copy;
+  });
+  G.pendingGoto   = rules.next || 'outro';
+  G.currentModule = 'chat';
+  advance();
+}
+
+function htmlDispatchInteractive() {
+  const rules = getDispatchRules();
+  const avail = rules.available_units || [
+    { id:'Carabineros',         icon:'🚔', desc:'Patrulla vehicular' },
+    { id:'Seguridad Ciudadana', icon:'🚨', desc:'Apoyo municipal en terreno' },
+    { id:'Ambulancia',          icon:'🚑', desc:'Emergencia médica' },
+    { id:'Bomberos',            icon:'🚒', desc:'Incendio / rescate' },
+  ];
+  const sel = G.selectedUnits;
+  const cards = avail.map(u => {
+    const on = sel.includes(u.id);
+    return `<div class="dp-unit-btn${on ? ' selected' : ''}" onclick="toggleUnit('${escAttr(u.id)}')">
+      <span class="dp-icon">${u.icon || '🔷'}</span>
+      <div style="flex:1"><div class="dp-unit-name">${esc(u.id)}</div><div class="dp-unit-desc">${esc(u.desc || '')}</div></div>
+      <div class="dp-check">${on ? '&#x2714;' : ''}</div>
+    </div>`;
+  }).join('');
+  const ok  = sel.length > 0;
+  const txt = ok ? sel.join(' + ') : 'Ninguna seleccionada';
+  return `<div class="dp-wrap">
+    <div class="dp-h">Consola de Despacho</div>
+    <div class="dp-card"><div class="dp-lbl">Caso activo</div><div class="dp-val">${esc(rules.case_title || 'Caso activo')}</div></div>
+    <div class="dp-lbl" style="margin-top:10px;margin-bottom:4px">Seleccioná las unidades a enviar</div>
+    <div class="dp-units-grid">${cards}</div>
+    <div style="font-size:10px;color:var(--text-dim);margin-bottom:8px">Seleccionadas: ${esc(txt)}</div>
+    <button class="dp-confirm-btn"${ok ? '' : ' disabled'} onclick="confirmDispatch()">&#x2714; CONFIRMAR DESPACHO</button>
+  </div>`;
+}
+
+// ── PANEL: DISPATCH ──
+function htmlDispatch() {
+  if (G.dispatchMode) return htmlDispatchInteractive();
+  const icons = { Carabineros:'🚔', 'Seguridad Ciudadana':'🚨', Ambulancia:'🚑', Bomberos:'🚒' };
+  const units = G.dispatchedUnits.length > 0
+    ? G.dispatchedUnits.map(u => `<div class="dp-unit">
+        <span class="dp-icon">${icons[u]||'🔷'}</span>
+        <span class="dp-uname">${esc(u)}</span>
+        <span class="dp-status">● EN CAMINO</span>
+      </div>`).join('')
+    : '<div class="dp-unit"><span class="dp-icon">⏳</span><span style="color:var(--text-dim);font-size:13px">Sin unidades despachadas</span><span class="dp-pending">EN ESPERA</span></div>';
+  return `<div class="dp-wrap">
+    <div class="dp-h">Consola de Despacho</div>
+    <div class="dp-card"><div class="dp-lbl">Estado del caso</div><div class="dp-val">${esc(G.facts.dispatch)}</div></div>
+    <div class="dp-lbl" style="margin-top:4px">Unidades asignadas</div>
+    <div style="display:flex;flex-direction:column;gap:8px">${units}</div>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CONTROLS + STATUS
+// ═══════════════════════════════════════════════════════════════════════════
+function refreshControls() {
+  // ── INPUT FORM MODE ─────────────────────────────────────────────────────────────────────
+  if (G.inputMode) {
+    document.getElementById('action-row').innerHTML =
+      '<div class="input-wrap">' +
+      '<input id="inp-answer" class="inp-answer" type="text" ' +
+      'placeholder="' + escAttr(G.inputHint) + '" autocomplete="off" spellcheck="false"/>' +
+      '<button class="btn-submit" onclick="submitInput()">&#x2714; REGISTRAR</button>' +
+      '</div>';
+    const el = document.getElementById('inp-answer');
+    if (el) { el.focus(); el.onkeydown = e => { if (e.key==='Enter') submitInput(); }; }
+    refreshStatus();
+    return;
+  }
+  // ── TOOL SEARCH MODE ──────────────────────────────────────────────────────────
+  if (G.toolMode) {
+    if (!G.toolOpen) {
+      const lbl = G.toolMode === 'address'
+        ? '&#x1F4CD; Buscar direcci&oacute;n en Mapa [P]'
+        : '&#x1F50D; Identificar modelo BMW en Mapa [P]';
+      document.getElementById('action-row').innerHTML =
+        '<button class="btn-tool-open" onclick="setModule(\'map\')">' + lbl + '</button>';
+    } else {
+      document.getElementById('action-row').innerHTML =
+        '<div style="color:var(--text-dim);font-size:12px;letter-spacing:.5px;padding:10px 4px">' +
+        '&#9658; Completa la b&uacute;squeda en el panel <strong style="color:var(--teal)">MAPA</strong></div>';
+    }
+    refreshStatus();
+    return;
+  }
+  // ── DISPATCH MODE ─────────────────────────────────────────────────────────────
+  if (G.dispatchMode) {
+    document.getElementById('action-row').innerHTML =
+      '<button class="btn-tool-open" onclick="setModule(\'dispatch\')">&#x1F694; Abrir Consola de Despacho [D]</button>';
+    refreshStatus();
+    return;
+  }
+  // ── RESTORE BUTTONS AFTER INPUT MODE ──────────────────────────────────────────
+  if (!document.getElementById('btn-continue')) {
+    document.getElementById('action-row').innerHTML =
+      '<button id="btn-continue" class="pulsing" onclick="advance()">CONTINUAR</button>' +
+      '<button class="btn-choice" id="bc1" onclick="resolveChoice(0)"></button>' +
+      '<button class="btn-choice" id="bc2" onclick="resolveChoice(1)"></button>';
+  }
+  const cb  = document.getElementById('btn-continue');
+  const bc1 = document.getElementById('bc1');
+  const bc2 = document.getElementById('bc2');
+  cb.classList.remove('pulsing');
+  bc1.className = 'btn-choice'; bc2.className = 'btn-choice';
+  bc1.style.flex = ''; bc2.style.display = '';
+  // Always restore default onclick so manual-nav never breaks choice buttons
+  bc1.onclick = () => resolveChoice(0);
+  bc2.onclick = () => resolveChoice(1);
+
+  if (needsWhatsApp()) {
+    cb.disabled = true; cb.textContent = '📱 Lee WhatsApp primero  [W]';
+    bc1.disabled = true; bc1.textContent = '';
+    bc2.style.display = 'none';
+    return;
+  }
+  if (G.waitingChoice && G.pendingChoice) {
+    const opts = G.pendingChoice.options || [];
+    cb.disabled = true; cb.textContent = '— elige —';
+    if (opts[0]) { bc1.disabled = false; bc1.textContent = opts[0].label; bc1.classList.add('live'); } else { bc1.disabled=true; bc1.textContent=''; }
+    if (opts[1]) {
+      bc2.style.display = ''; bc2.disabled = false; bc2.textContent = opts[1].label; bc2.classList.add('live');
+    } else {
+      bc2.style.display = 'none';
+      bc1.style.flex = '3'; // expand single choice button
+    }
+    return;
+  }
+  cb.disabled = false; cb.textContent = 'CONTINUAR'; cb.classList.add('pulsing');
+  if (G.currentModule === 'manual' && G.manualCats.length > 1) {
+    bc1.disabled = false; bc1.textContent = '◀ Anterior'; bc1.onclick = prevCat;
+    bc2.style.display = ''; bc2.disabled = false; bc2.textContent = 'Siguiente ▶'; bc2.onclick = nextCat;
+  } else {
+    bc1.disabled = true; bc1.textContent = '';
+    bc2.style.display = 'none';
+  }
+}
+
+function refreshStatus() {
+  const sl = document.getElementById('status-bar');
+  const beat = G.beatIndex, total = (G.currentScene.beats || []).length;
+  let msg = '', cls = '';
+  if (needsWhatsApp()) {
+    msg = '▶  Acción requerida: abre WhatsApp para leer el mensaje de Dani  [W]'; cls = 's-req';
+  } else if (G.pending911 && G.currentModule !== 'chat') {
+    msg = '🚨 Alerta 911 pendiente — revisa Canal 911  [C]'; cls = 's-alert';
+  } else if (G.waitingChoice) {
+    msg = '↕  Elige una opción para continuar';
+  } else {
+    const prog = total > 0 ? `  |  ${beat}/${total}` : '';
+    msg = `Escena: ${G.currentScene.title || ''}${prog}  |  ESPACIO · clic en CONTINUAR  |  C M P D W para módulos  |  F pantalla completa`;
+  }
+  sl.textContent = msg;
+  sl.className = cls ? 's-bar ' + cls : '';
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════════════════════
+function needsWhatsApp() {
+  // Gate applies even during choice — user must read WA before answering Dani
+  return G.currentSceneId === 'dani_chat' && G.personalUnread > 0 &&
+         G.currentModule !== 'personal';
+}
+
+function setModule(mod) {
+  G.currentModule = mod;
+  if (mod === 'chat')     { G.emergencyUnread = 0; G.pending911 = false; hideToast(); }
+  if (mod === 'personal') {
+    const ac = G.waContacts[G.waActive];
+    if (ac) { G.personalUnread = Math.max(0, G.personalUnread - ac.unread); ac.unread = 0; }
+    else G.personalUnread = 0;
+  }
+  if (mod === 'map')      { G.mapUnread = 0; }
+  if (mod === 'dispatch') { G.dispatchUnread = 0; }
+  refreshUI();
+}
+
+function goTo911() { hideToast(); setModule('chat'); }
+
+function addNarr(cls, text) {
+  const feed = document.getElementById('narr-feed');
+  const el = document.createElement('div');
+  el.className = cls; el.textContent = text;
+  feed.appendChild(el);
+  feed.scrollTop = feed.scrollHeight;
+  G.narrationLog.push({ cls, text });
+  if (G.narrationLog.length > 200) G.narrationLog.shift();
+}
+
+function cueOnce(key, cls, text) {
+  const scoped = G.currentSceneId + ':' + key;
+  if (G.cuesSeen.has(scoped)) return;
+  G.cuesSeen.add(scoped);
+  addNarr(cls, text);
+}
+
+let toastTimer = null;
+function showToast(speaker, text) {
+  document.getElementById('toast-text').textContent = speaker + ': ' + text;
+  document.getElementById('toast').classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(hideToast, 7000);
+}
+function hideToast() { document.getElementById('toast').classList.remove('show'); clearTimeout(toastTimer); }
+
+function doFade(cb) {
+  const f = document.getElementById('fade');
+  f.classList.add('on');
+  setTimeout(() => { f.classList.remove('on'); cb && cb(); }, 360);
+}
+
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// KEYBOARD
+// ═══════════════════════════════════════════════════════════════════════════
+document.addEventListener('keydown', e => {
+  const tag = document.activeElement && document.activeElement.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+  if (e.key === ' ')     { e.preventDefault(); advance(); }
+  if (e.key === 'Enter') { e.preventDefault(); advance(); }
+  if (e.key === '1')     { G.waitingChoice ? resolveChoice(0) : (G.currentModule==='manual' ? prevCat() : null); }
+  if (e.key === '2')     { G.waitingChoice ? resolveChoice(1) : (G.currentModule==='manual' ? nextCat() : null); }
+  if (e.key==='c'||e.key==='C') setModule('chat');
+  if (e.key==='m'||e.key==='M') setModule('manual');
+  if (e.key==='p'||e.key==='P') setModule('map');
+  if (e.key==='d'||e.key==='D') setModule('dispatch');
+  if (e.key==='w'||e.key==='W') setModule('personal');
+  if (e.key==='r'||e.key==='R') location.reload();
+  if (e.key==='f'||e.key==='F') {
+    if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+    else document.exitFullscreen();
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EMBEDDED STORY DATA (sin fetch, funciona con file://)
+// ═══════════════════════════════════════════════════════════════════════════
+const DEFAULT_STORY_DATA = {"start":"intro","manual_categories":[{"id":"vehiculo_robado","name":"Vehículo Robado","keys":["robo","auto","vehiculo","patente","estacionado","bmw","x1","placa"],"when":"Cuando reportan la desaparición de un vehículo","steps":["Mantén la calma del usuario","Solicita ubicación exacta del vehículo","Recopila detalles: patente, marca, modelo, color","Busca la dirección en el mapa si es necesario","Despacha Carabineros y considera Seguridad Ciudadana"],"avoid":["No intentes ser empático si el usuario está alterado","No saltes pasos del protocolo","No dejes al usuario sin asistencia en terreno"],"dispatch":"Carabineros + Seguridad Ciudadana"},{"id":"persona_riesgo","name":"Persona en Riesgo","keys":["peligro","amenaza","agresion","miedo","auxilio","ayuda"],"when":"Cuando alguien reporta amenaza directa a su seguridad","steps":["Obtén descripción de la amenaza","Confirma ubicación actual","Pregunta si el agresor está presente","Despacha unidades de inmediato","Mantén la línea abierta hasta la llegada"],"avoid":["No preguntes detalles innecesarios que demoren despacho","No cuelgues la línea","No juzgues la gravedad percibida"],"dispatch":"Carabineros + Ambulancia si hay lesiones"},{"id":"accidente_transito","name":"Accidente de Tránsito","keys":["choque","colision","atropello","vehiculo","ruta","accidente"],"when":"Cuando reportan colisión o choque vehicular","steps":["Pregunta si hay personas lesionadas","Obtén ubicación exacta del accidente","Solicita información de los vehículos involucrados","Verifica si hay tráfico obstruido","Despacha Carabineros y Ambulancia si hay heridos"],"avoid":["No des consejos sobre responsabilidad civil","No permitas que el usuario se aleje del lugar","No minimices posibles lesiones"],"dispatch":"Carabineros + Ambulancia"},{"id":"incendio_humo","name":"Incendio o Humo","keys":["humo","fuego","olor a quemado","llamas","explosion","incendio"],"when":"Cuando reportan fuego o humo sospechoso","steps":["Pide que describa el incendio o humo","Confirma ubicación y número de pisos","Pregunta si hay personas atrapadas","Ordena evacuación si es necesario","Despacha Bomberos de inmediato"],"avoid":["No aconsejes intentar apagar el fuego","No dejes que esperen dentro del lugar","No subestimes humos de origen desconocido"],"dispatch":"Bomberos + Carabineros"},{"id":"salud_urgente","name":"Salud Urgente","keys":["desmayo","dolor pecho","convulsion","respira","inconsciente","paro"],"when":"Cuando reportan emergencia médica o pérdida de conciencia","steps":["Determina el síntoma principal","Pregunta si está consciente","Solicita ubicación exacta","Proporciona instrucciones RCP si es necesario","Despacha Ambulancia prioritaria"],"avoid":["No des diagnósticos","No hagas esperar si es paro cardíaco","No termines la llamada antes de que llegue ambulancia"],"dispatch":"Ambulancia (PRIORIDAD)"},{"id":"violencia_intrafamiliar","name":"Violencia Intrafamiliar","keys":["golpes","pareja","amenaza","gritos","encerrada","violencia","abuso"],"when":"Cuando reportan violencia en el contexto familiar o de pareja","steps":["Verifica si hay peligro inmediato","Pregunta si el agresor está presente","Obtén descripción del agresor","Confirma ubicación segura","Despacha Carabineros y considera apoyo psicosocial"],"avoid":["No juzgues por qué no se fueron antes","No minimices patrones de abuso","No des la línea al agresor"],"dispatch":"Carabineros + Unidad especializada"},{"id":"persona_extraviada","name":"Persona Extraviada","keys":["desaparecida","extraviado","no llega","ultimo contacto","busqueda"],"when":"Cuando reportan que alguien desapareció o no llegó a su destino","steps":["Obtén descripción física de la persona","Pregunta cuándo fue visto por última vez","Solicita último lugar confirmado","Recopila información de ropa y accesorios","Coordina búsqueda con Carabineros"],"avoid":["No esperes 24 horas si hay riesgo","No subestimes desapariciones en menores","No minimices si está en zona peligrosa"],"dispatch":"Carabineros + Equipos de búsqueda"}],"scenes":[{"id":"intro","title":"Llegada a la Oficina","objective":"Establecer el contexto de Eric llegando a su primer día de trabajo","beats":[{"kind":"narration","text":"EN NEGRO. Cae la lluvia, luego pasos y una respiración acelerada."},{"kind":"narration","text":"EXT. CIUDAD - NOCHE OTOÑAL. Un joven de unos veinte años corre por la calle esquivando peatones. El es ERIC."},{"speaker":"ERIC","text":"Permiso. Perdón. Permiso."},{"kind":"narration","text":"Eric tiene un morral colgándole del hombro. En un momento se le engancha con un poste, se le raja y se le caen algunas cosas. Las recoje mientras mira los edificios."},{"kind":"narration","text":"EXT. EDIFICIO. Mirando su teléfono se detiene frente a un edificio casi apagado. Solo una luz está encendida. Corre."}],"next":"supervisor","channel":"narration"},{"id":"supervisor","title":"Primera Instrucción","objective":"El hombre le explica el trabajo: busca categoría en el manual y haz lo que dice","beats":[{"kind":"vignette","scene":"office"},{"kind":"narration","text":"INT. OFICINA. Eric entra a la oficina iluminada y ve varios cubículos. De pronto ve a un HOMBRE pasar. Sin entrar..."},{"speaker":"ERIC","text":"Eh..."},{"kind":"narration","text":"El hombre lo mira y lo apunta."},{"speaker":"HOMBRE","text":"¿Eric?"},{"kind":"narration","text":"Eric asiente. El hombre mira un reloj en la pared que dice que son las 21:11."},{"speaker":"HOMBRE","text":"Primer día y llegaste tarde, po, Eric."},{"speaker":"ERIC","text":"Sí, perdón, yo..."},{"speaker":"HOMBRE","text":"Da lo mismo. Ven que me tengo que ir yo. Este va a ser tu cubículo."},{"kind":"narration","text":"El hombre apunta un cubículo con su dedo. INT. CUBÍCULO. Eric se sienta frente a un computador."},{"speaker":"HOMBRE","text":"Perfecto, Eric, acá vas tú. Las emergencias acá y el chat acá y... ¿esta es tu primera vez como dispatcher?"},{"kind":"narration","text":"Eric asiente."},{"kind":"narration","text":"El hombre saca unas hojas anilladas y las pone sobre la mesa. Es un manual para Dispatcher."},{"speaker":"HOMBRE","text":"Okey, esta cuestión es simple. Te llega algo, buscas la categoría y haces lo que dice el manual. Así de simple, ¿bueno?"},{"speaker":"ERIC","text":"Pero..."},{"speaker":"HOMBRE","text":"¿Bueno?"},{"kind":"narration","text":"Eric asiente."},{"speaker":"HOMBRE","text":"Ya, ahora yo me voy que tenía que estar a las siete en punto pasando a buscar a mi mujer para llevarla al cine. Si quieres agua, ahí hay agua, pero nunca... nunca... te muevas de tu estación. Nunca."},{"kind":"narration","text":"Eric lo mira y asiente. El lo mira... y se va. Eric se asoma para mirar alrededor. Al parecer ha quedado completamente solo en la oficina."}],"next":"dani_chat","channel":"narration"},{"id":"dani_chat","title":"Mensaje de Dani","objective":"Eric contacta a su amiga/novia Dani. Ella lo orienta sobre el manual.","beats":[{"kind":"narration","text":"Eric mira la pantalla del computador. Fijo. No pasa nada. No entra ningún mensaje. No sabe qué hacer."},{"kind":"narration","text":"Eric toma su teléfono y busca un contacto: DANI. Abre el chat y escribe: 'Llegué'."},{"kind":"narration","text":"Espera. De pronto... escribiendo..."},{"speaker":"DANI","text":"¿Recién?"}],"choices":[{"at":4,"prompt":"¿Qué vas a hacer? ¿Mentirle o decirle la verdad?","options":[{"label":"Decirle la verdad","beats":[{"speaker":"ERIC","text":"O sea... como hace 15 minutos"},{"speaker":"DANI","text":"O sea que llegaste tarde"},{"speaker":"ERIC","text":"No fue mi culpa, Dani, se había tirado alguien al metro y tuve que correr desde Los Héroes"},{"kind":"narration","text":"La cara de preocupación de Eric se ve reflejada en la pantalla del celular."},{"speaker":"DANI","text":"Siempre es culpa de alguien más, Eric... pero que bueno que me dijiste la verdad"},{"kind":"narration","text":"Eric sonríe."},{"speaker":"ERIC","text":"Con la plata te voy a llevar al sushi que te gusta"},{"speaker":"DANI","text":"Más te vale. Me costó un montón que te dieran la pega"},{"speaker":"ERIC","text":"Te amo"},{"kind":"narration","text":"escribiendo..."},{"speaker":"DANI","text":"Yo también y ya, deja de hablarme y concéntrate que esto no es fácil. La gente que llama depende de que tomes buenas decisiones y... no digamos que ese es tu fuerte tampoco"},{"kind":"narration","text":"Eric mira la pantalla, avergonzado."},{"speaker":"ERIC","text":"Ya. ¿Te puedo escribir si necesito ayuda?"},{"speaker":"DANI","text":"Sí. Yo voy a pasar de largo hoy día. Me queda un montón de materia por repasar todavía. ¿Te pasaron el manual?"},{"speaker":"ERIC","text":"Me lo pasaron, sí"},{"speaker":"DANI","text":"Bien. Si todavía no te han llegado mensajes, ponte a leerlo. Te va a ayudar más que yo"},{"speaker":"ERIC","text":"Bueno"},{"speaker":"DANI","text":"Hazlo, Eric. Y no-te pongas-a dibujar, ¿ya?"},{"speaker":"ERIC","text":"(L)"}],"goto":"pre_alert"}]}],"channel":"whatsapp"},{"id":"pre_alert","title":"Espera","objective":"Eric espera mientras la notificación llega. Elige entre leer o dibujar.","beats":[{"kind":"narration","text":"escribiendo... Eric espera... La Dani deja de escribir sin enviar el mensaje."},{"kind":"narration","text":"Eric mira el teléfono, desilusionado. Lo deja a un lado. Mira la pantalla; aún no ha llegado nada. Mira alrededor. Mira el auricular viejo de telecomunicaciones, mira el manual. Piensa..."}],"choices":[{"at":2,"prompt":"¿Qué vas a hacer? ¿Leer el manual o ponerte a dibujar?","options":[{"label":"Ponerte a dibujar","beats":[{"kind":"narration","text":"Eric agarra su morral y empieza a sacar cosas. Saca unos audífonos gamer, los conecta a su celular, pone música, saca una libreta, un lápiz y se pone a dibujar."},{"kind":"narration","text":"Mira la pantalla de vez en cuando... nada."},{"kind":"narration","text":"Se siente como pasa el tiempo, dibujando."},{"kind":"narration","text":"En la pantalla nada."},{"kind":"narration","text":"Eric mira una vez más..."},{"speaker":"ERIC","text":"La pega más fácil del mundo"},{"kind":"narration","text":"De pronto, el reloj análogo en la pared da... las diez. Inmediatamente suena una NOTIFICACIÓN."}],"goto":"first_alert"}]}],"channel":"narration"},{"id":"first_alert","title":"Primera Alerta","objective":"Llega la primera llamada de emergencia. Eric se desespera.","beats":[{"kind":"narration","text":"Eric mira la pantalla, pero no descubre nada en movimiento ni que le llame la atención. ¿Será?"},{"kind":"narration","text":"Eric vuelve a dibujar."},{"kind":"narration","text":"El icono de la notificación pasa de estar verde a estar rojo y suena una NOTIFICACIÓN un poco más estridente. Sí hay mensaje."},{"kind":"narration","text":"Eric se desespera y trata de contestar el mensaje. No sabe como hacerlo. Hace clic, pero nada... ¡Clic, clic, clic, clic, clic, clic, clic!"},{"kind":"narration","text":"De pronto..."},{"kind":"sfx","sfx":"911"},{"speaker":"MENSAJE","text":"¿Aló?"},{"kind":"narration","text":"Es una voz femenina. Hay algo en el mensaje; en el tono o la forma en que está escrito, que asusta a Eric."}],"next":"call_fragment","channel":"narration"},{"id":"call_fragment","title":"Fragmento de Llamada","objective":"Primeros intentos de comunicación. Eric debe decidir si buscar ayuda en el manual o improvisar.","beats":[{"speaker":"ERIC","text":"Eh... ¿Aló?"},{"speaker":"MENSAJE","text":"Aló, necesito--"},{"kind":"narration","text":"De pronto, el mensaje se corta."},{"kind":"narration","text":"Eric mira la pantalla desesperado tratando de encontrar el mensaje. Nada."},{"speaker":"ERIC","text":"¿Aló, aló, aló? ¿Señorita...?"},{"kind":"narration","text":"De pronto, otro mensaje aparece en la pantalla. Ahora sí, Eric responde enseguida..."},{"speaker":"MENSAJE","text":"¡Aló, por favor, necesito ayuda!"},{"kind":"narration","text":"Eric, con la urgencia, no lo nota, pero esta, aunque es una voz femenina, evidentemente no es la misma voz de antes."},{"speaker":"ERIC","text":"Eh..."}],"choices":[{"at":9,"prompt":"¿Qué vas a hacer? ¿Buscar ayuda en el manual o improvisar?","options":[{"label":"Buscar ayuda en el manual","beats":[{"kind":"narration","text":"Eric toma el manual y empieza a pasar las hojas. Pasa y pasa y pasa."},{"speaker":"MENSAJE","text":"¡Aló, por favor, necesito ayuda!"},{"speaker":"ERIC","text":"Eh, sí, un segundo, un segundo, por favor"},{"speaker":"MENSAJE","text":"¡Cómo que un segundo! ¡Necesito ayuda! ¿A quién acabo de llamar? ¡A la asociación de giles unidos!"},{"speaker":"ERIC","text":"Eh, sí, lo que pasa es que..."},{"speaker":"MENSAJE","text":"¿Qué, po, cabro? ¿Te pillé viendo porno o algo? ¿Tengo que volver a repetirlo? ¡Necesito-ayuda!"},{"speaker":"ERIC","text":"Eh..."},{"kind":"narration","text":"Eric transpira. No encuentra nada, pero de pronto el título: ¿CÓMO RESPONDER UN LLAMADO? – RESPUESTA GENERAL."},{"kind":"narration","text":"Eric escribe..."},{"speaker":"ERIC","text":"Hola, sí, Centro de Comunicaciones de Emergencia. Mi nombre es Eric... ¿cuál es su emergencia?"},{"speaker":"MENSAJE","text":"¡Mi emergencia, Eric, es que me hiciste perder cinco minutos esperando cuando ya podrías haber despachado una unidad a buscar el auto que me acaban de robar! ¡Esa es mi emergencia, Eric!"}],"goto":"manual_search"}]}],"channel":"911"},{"id":"manual_search","title":"Buscando la Sección","beats":[{"kind":"narration","text":"Eric empieza a buscar en el manual la sección correcta..."},{"kind":"narration","text":"Eric pasa las páginas..."},{"speaker":"MENSAJE","text":"¿¡Eric!?"},{"kind":"narration","text":"Eric sigue buscando, sin detenerse."},{"speaker":"MENSAJE","text":"Eric, ¿por casualidad me tocó justo hablar con el representante de toda esta cuestión de la inclusión laboral?"},{"kind":"narration","text":"Eric pasa más páginas, decidido."},{"speaker":"MENSAJE","text":"Eric, ¡¿lo que estoy tratando de entender es si tení un retraso m--?!"},{"kind":"narration","text":"¡Eric encuentra la página! VEHÍCULO ROBADO."},{"speaker":"ERIC","text":"¡Aquí!"}],"choices":[{"at":1,"prompt":"¿Buscar la sección de auto robado o decirle que se calme?","options":[{"label":"Buscar la sección","beats":[]}]},{"at":3,"prompt":"¿Seguir buscando o decirle que baje el volumen?","options":[{"label":"Seguir buscando","beats":[]}]},{"at":5,"prompt":"¿Seguir buscando o preguntarle cuánto tomó esa noche?","options":[{"label":"Seguir buscando","beats":[]}]},{"at":7,"prompt":"¿Seguir buscando o cortarle tratándola de vieja rota?","options":[{"label":"Seguir buscando","beats":[]}]}],"next":"investigation","channel":"911","case_id":"tutorial_mirna_auto_robado"},{"id":"investigation","title":"Investigación - Llamada con Mirna","objective":"Eric sigue el manual para recopilar datos sobre el vehículo robado. Paso a paso.","beats":[{"speaker":"ERIC","text":"Señora, para continuar voy a necesitar que mantenga la calma"},{"speaker":"ERIC","text":"Señora, ¿cuál fue la última ubicación confirmada del vehículo?"},{"speaker":"MENSAJE","text":"Uf, por fin vamos pa' adelante, Eric, oh. Mira, vine a comer con una amiga a Providencia. Entré, me comí una ensalada, me tomé una champaña, salí y mi auto ya no estaba donde lo había estacionado"},{"speaker":"ERIC","text":"Señora, ¿podría darme la dirección exacta en la que se encuentra?"},{"speaker":"MENSAJE","text":"Eric, mi amor, quiero que sepas que no tengo las puta idea de la dirección exacta en la que me encuentro. No soy de acá y si la supiera ya te la hubiese--"},{"kind":"narration","text":"Eric interrumpe."},{"speaker":"ERIC","text":"Señora, ¿y podría decirme el nombre del local si es posible?"},{"speaker":"MENSAJE","text":"Sí, Eric, eso sí puedo hacerlo. Es el ROSSIE LA LOCA de Providencia. ¿Y Eric...?"},{"kind":"input","field":"local","setValue":"Rossie La Loca","answer":"rossie","hint":"Anotá el nombre del local que mencionó la llamante"}],"choices":[{"at":9,"prompt":"¿Qué vas a hacer? ¿Responderle o seguir con el protocolo?","options":[{"label":"Responderle","beats":[{"speaker":"ERIC","text":"¿Sí, señora?"},{"speaker":"MENSAJE","text":"Acabo de concretar mi tercer divorcio, Eric. Es señorita de nuevo, ¿ya?"},{"kind":"narration","text":"Eric sonríe..."},{"speaker":"MENSAJE","text":"Y mi nombre es Mirna, Eric"},{"speaker":"ERIC","text":"Muy bien... señorita Mirna"},{"kind":"tool-search","tool":"address"},{"speaker":"ERIC","text":"Señorita Mirna, entonces, y según lo que puedo ver en el mapa, usted se encuentra en Av. Tobalaba 947, comuna de Providencia"},{"speaker":"MENSAJE","text":"Ya..."},{"speaker":"ERIC","text":"Señorita Mirna, antes de enviarle a la patrulla, ¿sería tan amable de darme algunos detalles del vehículo?"},{"speaker":"MENSAJE","text":"Bueno, Eric..."},{"speaker":"ERIC","text":"¿Podría darme la patente del vehículo?"},{"speaker":"MENSAJE","text":"Eric, la patente de mi auto es TVBA-20"},{"kind":"input","field":"plate","setValue":"TVBA-20","answer":"tvba","hint":"Anotá la patente del vehículo robado"},{"speaker":"ERIC","text":"Señorita Mirna, ¿podría darme la marca y el modelo del vehículo?"},{"speaker":"MENSAJE","text":"Es un BMW, Eric. Las viejas como yo siempre compramos un BMW, pero... el modelo... no sé, Eric. Eh... a ver... dime qué modelos de BMW conoces a ver si me acuerdo cuál era la cuestión... es uno de esto guatones..."},{"speaker":"ERIC","text":"¿Es un SUV?"},{"speaker":"MENSAJE","text":"Esos, Eric... X algo... no sé cuál..."},{"speaker":"ERIC","text":"Señorita Mirna, ¿se acuerda del precio por último?"},{"speaker":"MENSAJE","text":"Mira, Eric, de los tres hombres en mi vida que ya pasaron ninguno me dejó mucho. Me lo pelearon todo así que Es un BMW SUV, pero tiene que ser el más barato"},{"kind":"tool-search","tool":"vehicle"},{"speaker":"ERIC","text":"Señorita Mirna, según lo que tengo acá, el más económico de la línea SUV de BMW es el modelo X1, ¿le suena correcto?"},{"speaker":"MENSAJE","text":"Suena correcto, Eric"},{"speaker":"ERIC","text":"Señora Mirna, por último, ¿podría darme el color del vehículo?"},{"speaker":"MENSAJE","text":"Blanco, Eric. Y es señorita..."},{"kind":"input","field":"color","setValue":"BMW X1 · blanco","answer":"blanco","hint":"Anotá el color del vehículo"},{"speaker":"ERIC","text":"Señorita..."},{"speaker":"ERIC","text":"Muy bien, señorita Mirna. Con esos datos ya puedo gestionar el despacho de emergencia."}],"goto":"dispatch_choice"}]}],"channel":"911","case_id":"tutorial_mirna_auto_robado"},{"id":"dispatch_choice","title":"Despacho de Unidades","objective":"Eric elige las unidades a despachar según el manual","beats":[{"kind":"sfx","sfx":"dispatch"},{"kind":"ambient","ambient":"tension"},{"kind":"narration","text":"En la pantalla dos iconos parpadean. CARABINEROS y SEGURIDAD CIUDADANA."},{"kind":"dispatch"}],"next":"outro","channel":"911","case_id":"tutorial_mirna_auto_robado"},{"id":"outro","title":"Incidente Completado","objective":"Cierre: Eric termina la llamada y reflexiona sobre su primer incidente.","beats":[{"kind":"vignette","scene":"closure"},{"kind":"sfx","sfx":"confirm"},{"kind":"narration","text":"INCIDENTE COMPLETADO. VEHÍCULO ROBADO — EN PROCESO. REVISAR PANEL DESPACHO."},{"kind":"narration","text":"Eric corta... espera... cuando ya no escucha nada y no hay otro mensaje se echa para atrás y..."},{"speaker":"ERIC","text":"Uf..."},{"kind":"narration","text":"Son las 10:45."}],"next":null,"channel":"narration","case_id":"tutorial_mirna_auto_robado"}],"cases":[{"id":"tutorial_mirna_auto_robado","title":"Tutorial — Vehículo robado","description":"Primer caso jugable. Mirna reporta el robo de su vehículo en Providencia. Sirve como tutorial de manual, mapa, inputs, buscador web y despacho.","start_scene":"mirna_open","case_fields":{"local":{"factPath":"facts.local","logTemplate":"✔ Local: {value}","notificationLabel":"LOCAL REGISTRADO"},"plate":{"factPath":"facts.plate","logTemplate":"✔ Patente: {value}","notificationLabel":"PATENTE REGISTRADA"},"vehicle":{"factPath":"facts.vehicle","logTemplate":"✔ Modelo: {value}","notificationLabel":"MODELO REGISTRADO"},"color":{"factPath":"facts.vehicle","logTemplate":"✔ Vehículo: {value}","notificationLabel":"VEHÍCULO COMPLETO"}},"tool_search":{"address":{"title":"🗺 Buscador de locales — Providencia","hint":"Mirna mencionó un local en Providencia. Búscalo para confirmar la dirección exacta.","placeholder":"Ej: Rossie La Loca, Providencia","match_patterns":["rossie","loca"],"result":{"name":"📍 ROSSIE LA LOCA","address":"Av. Tobalaba 947, Providencia","description":"Local gastronómico · coordenadas verificadas","setFacts":{"address":"Av. Tobalaba 947, Providencia"},"mapLog":"✔ Dirección confirmada: Av. Tobalaba 947, Providencia","notificationLabel":"DIRECCIÓN CONFIRMADA","notificationValue":"Av. Tobalaba 947, Providencia"}},"vehicle":{"title":"🔍 Catálogo BMW — Línea SUV","hint":"Mirna dijo que es un BMW SUV, el más barato. Identifica el modelo correcto y regístralo.","models":[{"name":"BMW X1","type":"SUV compacto","price":"desde $23.990.000","note":"el más económico","badge":"← MÁS BARATO"},{"name":"BMW X3","type":"SUV mediano","price":"desde $45.990.000","note":"equilibrio y espacio","badge":""},{"name":"BMW X5","type":"SUV grande","price":"desde $89.990.000","note":"potencia avanzada","badge":""},{"name":"BMW X7","type":"SUV premium","price":"desde $125.990.000","note":"el flagship SUV","badge":""}]}},"dispatch_rules":{"case_title":"Vehículo robado — Providencia","available_units":[{"id":"Carabineros","icon":"🚔","desc":"Patrulla vehicular"},{"id":"Seguridad Ciudadana","icon":"🚨","desc":"Apoyo municipal en terreno"},{"id":"Ambulancia","icon":"🚑","desc":"Emergencia médica"},{"id":"Bomberos","icon":"🚒","desc":"Incendio / rescate"}],"required_units":["Carabineros","Seguridad Ciudadana"],"next":"outro","outcomes":[{"id":"complete","match":"all_required","notification":"UNIDADES DESPACHADAS","beats":[{"kind":"narration","text":"✔ DESPACHO COMPLETO — {label}"},{"speaker":"ERIC","text":"Señorita Mirna, ya alerté a carabineros para iniciar la búsqueda del vehículo y también envié apoyo de seguridad ciudadana a su ubicación, ¿de acuerdo?"},{"speaker":"MENSAJE","text":"Súper... sigo esperando entonces... aquí... cagada de frío"},{"speaker":"ERIC","text":"Señorita Mirna, ¿necesita algo más?"},{"speaker":"MENSAJE","text":"No, nada..."},{"speaker":"ERIC","text":"Ok, entonces..."},{"speaker":"MENSAJE","text":"¿Eric?"},{"speaker":"ERIC","text":"¿Sí, señorita Mirna?"},{"speaker":"MENSAJE","text":"Perdona por lo vieja culiada que fui al principio, ¿ya? No es mi intención"},{"speaker":"ERIC","text":"No se preocupe, señorita Mirna. Buenas noches"},{"speaker":"MENSAJE","text":"Buenas noches, Eric"}]},{"id":"partial_carabineros","match_units":["Carabineros"],"notification":"DESPACHO PARCIAL","beats":[{"kind":"narration","text":"⚠ DESPACHO PARCIAL — {label}"},{"speaker":"ERIC","text":"Señorita Mirna, ya alerté a carabineros para iniciar la búsqueda del vehículo."},{"speaker":"MENSAJE","text":"¿Y seguridad ciudadana?"},{"speaker":"ERIC","text":"Por el momento solo carabineros, señorita Mirna."},{"speaker":"MENSAJE","text":"..."},{"kind":"narration","text":"El manual recomendaba Carabineros + Seguridad Ciudadana para vehículo robado."}]},{"id":"partial_seguridad","match_units":["Seguridad Ciudadana"],"notification":"DESPACHO INCORRECTO","beats":[{"kind":"narration","text":"⚠ DESPACHO INCORRECTO — {label}"},{"speaker":"ERIC","text":"Señorita Mirna, ya envié apoyo de seguridad ciudadana a su ubicación."},{"speaker":"MENSAJE","text":"¿Y carabineros?"},{"speaker":"ERIC","text":"Eh... solo seguridad ciudadana, señorita Mirna."},{"speaker":"MENSAJE","text":"¿En serio, Eric?"},{"kind":"narration","text":"El manual indicaba Carabineros como unidad primaria para vehículo robado."}]},{"id":"wrong","match":"fallback","notification":"UNIDADES INCORRECTAS","beats":[{"kind":"narration","text":"✘ UNIDADES INCORRECTAS — {label}"},{"speaker":"MENSAJE","text":"Eric... eso no es lo que necesitaba."},{"kind":"narration","text":"Para vehículo robado: Carabineros + Seguridad Ciudadana (ver manual p.10)."}]}]},"initial_facts":{"local":"—","address":"—","plate":"—","vehicle":"—","dispatch":"—"}}]};
+if (!STORY_DATA) STORY_DATA = DEFAULT_STORY_DATA;
+
+// ─── GO ──────────────────────────────────────────────────────────────────────
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUDIO ENGINE  (usa archivos reales de assets/)
+// ═══════════════════════════════════════════════════════════════════════════
+const AUDIO = (() => {
+  let _muted = false;
+  let _ambAudio = null;
+
+  function sfxSrc(name) {
+    return ((ASSET_DATA.audio || {}).sfx || {})[name];
+  }
+
+  function musicSrc(name) {
+    return ((ASSET_DATA.audio || {}).music || {})[name];
+  }
+
+  function sfx(name) {
+    if (_muted) return;
+    const src = sfxSrc(name);
+    if (!src) return;
+    try {
+      const a = new Audio(src);
+      a.volume = 0.55;
+      a.play().catch(() => {});
+    } catch(e) {}
+  }
+
+  function stopAmbient() {
+    if (_ambAudio) {
+      try { _ambAudio.pause(); _ambAudio.currentTime = 0; } catch(e) {}
+      _ambAudio = null;
+    }
+  }
+
+  function startAmbient(name) {
+    stopAmbient();
+    if (_muted) return;
+    const src = musicSrc(name);
+    if (!src) return;
+    try {
+      _ambAudio = new Audio(src);
+      _ambAudio.loop = true;
+      _ambAudio.volume = 0.22;
+      _ambAudio.play().catch(() => {});
+    } catch(e) {}
+  }
+
+  function toggleMute() {
+    _muted = !_muted;
+    if (_muted) stopAmbient();
+    const b = document.getElementById('sound-btn');
+    if (b) b.textContent = _muted ? '🔇' : '🔊';
+    return _muted;
+  }
+
+  return { sfx, startAmbient, stopAmbient, toggleMute };
+})();
+
+// ═══════════════════════════════════════════════════════════════════════════
+// VIGNETTE & CINEMATIC SYSTEM
+// ═══════════════════════════════════════════════════════════════════════════
+const VIGNETTE_DEFS = {
+  arrival: {
+    bg: 'linear-gradient(160deg,#020510 0%,#0a0520 50%,#050b18 100%)',
+    art: `<svg viewBox="0 0 400 200" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%"><rect width="400" height="200" fill="#03050e"/><rect x="0" y="150" width="400" height="50" fill="#05080f"/><rect x="15" y="108" width="28" height="42" fill="#06080f"/><rect x="55" y="93" width="42" height="57" fill="#050810"/><rect x="112" y="80" width="32" height="70" fill="#070a1c"/><rect x="158" y="98" width="50" height="52" fill="#060915"/><rect x="225" y="85" width="38" height="65" fill="#07091a"/><rect x="280" y="103" width="46" height="47" fill="#060816"/><rect x="342" y="92" width="32" height="58" fill="#07091c"/><rect x="22" y="124" width="5" height="6" fill="#f9e2af" opacity="0.55"/><rect x="128" y="103" width="4" height="5" fill="#f9e2af" opacity="0.38"/><rect x="242" y="109" width="5" height="6" fill="#f9e2af" opacity="0.48"/><line x1="20" y1="0" x2="13" y2="40" stroke="#3a6ab0" stroke-width="0.6" opacity="0.28"/><line x1="60" y1="0" x2="54" y2="36" stroke="#3a6ab0" stroke-width="0.5" opacity="0.38"/><line x1="110" y1="0" x2="103" y2="44" stroke="#3a6ab0" stroke-width="0.7" opacity="0.24"/><line x1="160" y1="0" x2="154" y2="34" stroke="#3a6ab0" stroke-width="0.6" opacity="0.34"/><line x1="210" y1="0" x2="203" y2="40" stroke="#3a6ab0" stroke-width="0.5" opacity="0.28"/><line x1="260" y1="0" x2="254" y2="36" stroke="#3a6ab0" stroke-width="0.7" opacity="0.38"/><line x1="310" y1="0" x2="304" y2="38" stroke="#3a6ab0" stroke-width="0.6" opacity="0.24"/><line x1="360" y1="0" x2="355" y2="34" stroke="#3a6ab0" stroke-width="0.5" opacity="0.34"/><line x1="40" y1="0" x2="33" y2="44" stroke="#3a6ab0" stroke-width="0.4" opacity="0.18"/><line x1="90" y1="0" x2="84" y2="40" stroke="#3a6ab0" stroke-width="0.6" opacity="0.28"/><line x1="140" y1="0" x2="134" y2="38" stroke="#3a6ab0" stroke-width="0.5" opacity="0.38"/><line x1="190" y1="0" x2="184" y2="44" stroke="#3a6ab0" stroke-width="0.7" opacity="0.24"/><line x1="240" y1="0" x2="234" y2="40" stroke="#3a6ab0" stroke-width="0.5" opacity="0.32"/><line x1="290" y1="0" x2="284" y2="36" stroke="#3a6ab0" stroke-width="0.6" opacity="0.28"/><line x1="340" y1="0" x2="335" y2="42" stroke="#3a6ab0" stroke-width="0.4" opacity="0.18"/><line x1="380" y1="0" x2="375" y2="34" stroke="#3a6ab0" stroke-width="0.6" opacity="0.38"/><g transform="translate(196,148)"><circle cy="-28" r="5" fill="#1a3550"/><line x1="0" y1="-23" x2="-4" y2="-10" stroke="#1a3550" stroke-width="3"/><line x1="-4" y1="-10" x2="-9" y2="0" stroke="#1a3550" stroke-width="2.5"/><line x1="-4" y1="-10" x2="3" y2="0" stroke="#1a3550" stroke-width="2.5"/><line x1="0" y1="-23" x2="-7" y2="-16" stroke="#1a3550" stroke-width="2"/><line x1="0" y1="-23" x2="6" y2="-18" stroke="#1a3550" stroke-width="2"/></g></svg>`,
+    label: 'PROVIDENCIA \u00b7 CHILE', subtitle: 'Noche oto\u00f1al \u2014 21:08'
+  },
+  office: {
+    bg: 'linear-gradient(180deg,#05080f 0%,#080d1a 60%,#040810 100%)',
+    art: `<svg viewBox="0 0 400 200" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%"><rect width="400" height="200" fill="#06080f"/><rect x="40" y="105" width="140" height="7" fill="#0c1422" rx="2"/><rect x="220" y="105" width="140" height="7" fill="#0c1422" rx="2"/><rect x="40" y="148" width="140" height="7" fill="#0c1422" rx="2"/><rect x="220" y="148" width="140" height="7" fill="#0c1422" rx="2"/><rect x="78" y="82" width="62" height="20" fill="#090f1e" rx="2"/><rect x="80" y="84" width="58" height="16" fill="#0d224a" rx="1" opacity="0.7"/><rect x="258" y="82" width="62" height="20" fill="#090f1e" rx="2"/><rect x="260" y="84" width="58" height="16" fill="#07080f" rx="1"/><rect x="173" y="70" width="54" height="38" fill="none" stroke="#1a3a6a" stroke-width="0.5" opacity="0.3"/><rect x="178" y="75" width="44" height="14" fill="#0d2050" rx="2" opacity="0.85"/><rect x="180" y="77" width="40" height="10" fill="#1a4888" rx="1" opacity="0.7"/><line x1="100" y1="30" x2="100" y2="54" stroke="#1a3a6a" stroke-width="1" opacity="0.3"/><circle cx="100" cy="57" r="3" fill="#f9e2af" opacity="0.1"/><line x1="200" y1="30" x2="200" y2="54" stroke="#1a3a6a" stroke-width="1" opacity="0.3"/><circle cx="200" cy="57" r="3" fill="#f9e2af" opacity="0.38"/><line x1="300" y1="30" x2="300" y2="54" stroke="#1a3a6a" stroke-width="1" opacity="0.3"/><circle cx="300" cy="57" r="3" fill="#f9e2af" opacity="0.1"/></svg>`,
+    label: 'CCE \u2014 CENTRO DE COMUNICACIONES', subtitle: 'Turno noche \u2014 personal m\u00ednimo'
+  },
+  alert: {
+    bg: 'linear-gradient(160deg,#0f0505 0%,#1a0808 50%,#0a0303 100%)',
+    art: `<svg viewBox="0 0 400 200" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%"><defs><radialGradient id="ard" cx="50%" cy="50%" r="45%"><stop offset="0%" stop-color="#ff4444" stop-opacity="0.18"/><stop offset="100%" stop-color="#0f0505" stop-opacity="0"/></radialGradient></defs><rect width="400" height="200" fill="url(#ard)"/><rect x="55" y="60" width="82" height="58" fill="#0d0808" rx="4"/><rect x="58" y="63" width="76" height="48" fill="#ff2222" opacity="0.1" rx="2"/><rect x="158" y="48" width="84" height="70" fill="#0d0808" rx="4"/><rect x="161" y="51" width="78" height="60" fill="#ff3333" opacity="0.15" rx="2"/><text x="200" y="94" text-anchor="middle" font-family="monospace" font-size="22" font-weight="bold" fill="#ff4444" opacity="0.5">911</text><rect x="262" y="60" width="82" height="58" fill="#0d0808" rx="4"/><circle cx="130" cy="44" r="5" fill="#ff4444" opacity="0.75"/><circle cx="130" cy="44" r="9" fill="none" stroke="#ff4444" stroke-width="1" opacity="0.4"/></svg>`,
+    label: 'ALERTA \u2014 CANAL 911', subtitle: 'Incidente activo en curso'
+  },
+  closure: {
+    bg: 'linear-gradient(160deg,#050f12 0%,#081820 50%,#040c10 100%)',
+    art: `<svg viewBox="0 0 400 200" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%"><defs><radialGradient id="crd" cx="50%" cy="50%" r="40%"><stop offset="0%" stop-color="#1a4a5a" stop-opacity="0.35"/><stop offset="100%" stop-color="#050f12" stop-opacity="0"/></radialGradient></defs><rect width="400" height="200" fill="url(#crd)"/><rect x="145" y="95" width="110" height="80" fill="#0c1820" rx="3" stroke="#1a3a4a" stroke-width="0.5"/><rect x="150" y="100" width="100" height="70" fill="#09141c" rx="2"/><rect x="160" y="116" width="65" height="2" fill="#1a4a5a" rx="1" opacity="0.5"/><rect x="160" y="126" width="80" height="2" fill="#1a4a5a" rx="1" opacity="0.35"/><rect x="160" y="136" width="55" height="2" fill="#1a4a5a" rx="1" opacity="0.35"/><circle cx="200" cy="72" r="20" fill="#070f16" stroke="#94e2d5" stroke-width="1.5"/><polyline points="189,72 196,79 213,65" stroke="#94e2d5" stroke-width="2.5" fill="none" stroke-linecap="round"/></svg>`,
+    label: 'CASO CERRADO', subtitle: 'Turno completado'
+  }
+};
+
+const IMG_ARTS = {
+  arrival: 'assets/images/eric llegando/1-2.png',
+  office:  'assets/images/jefe le muestra oficina/2.png',
+  alert:   'assets/images/eric/eric despachando unidades.png',
+  closure: 'assets/images/eric/eric termina el caso de mirna y suspira uf.png',
+};
+
+function resolveImageAssetPath(path) {
+  const p = String(path || '').trim();
+  if (!p) return '';
+  // Legacy compatibility: data may point to assets/images while files are under assets/vignettes.
+  return p.startsWith('assets/images/') ? p.replace('assets/images/', 'assets/vignettes/') : p;
+}
+
+function imageTagWithLegacyFallback(path, fit) {
+  const src = resolveImageAssetPath(path);
+  if (!src) return '';
+  const fallback = src.startsWith('assets/vignettes/')
+    ? src.replace('assets/vignettes/', 'assets/images/')
+    : src;
+  const safeSrc = escAttr(src);
+  const safeFallback = escAttr(fallback);
+  const objectFit = fit || 'cover';
+  return `<img src="${safeSrc}" style="width:100%;height:100%;object-fit:${objectFit}" alt="" onerror="if(this.dataset.fb){this.src=this.dataset.fb;this.dataset.fb='';}else{this.style.display='none';}" data-fb="${safeFallback}">`;
+}
+
+let _vgnTimer = null;
+function showVignette(scene, onDone) {
+  const external = ((ASSET_DATA.vignettes || {})[scene]) || {};
+  const fallback = VIGNETTE_DEFS[scene] || {};
+  const d = { ...fallback, ...external };
+  const el = document.getElementById('vignette-overlay');
+  if (!el) { if (onDone) onDone(); return; }
+  document.getElementById('vgn-bg').style.background = d.bg || 'rgba(0,0,0,.88)';
+  const img = d.image || IMG_ARTS[scene];
+  document.getElementById('vgn-art').innerHTML = img
+    ? imageTagWithLegacyFallback(img, 'cover')
+    : (d.art || '');
+  document.getElementById('vgn-label').textContent    = d.label || '';
+  document.getElementById('vgn-title').textContent    = d.title || '';
+  document.getElementById('vgn-subtitle').textContent = d.subtitle || '';
+  el.style.display    = 'flex';
+  el.style.opacity    = '0';
+  el.style.transition = '';
+  el.offsetHeight;
+  el.style.transition = 'opacity .5s';
+  el.style.opacity    = '1';
+  if (_vgnTimer) clearTimeout(_vgnTimer);
+  _vgnTimer = setTimeout(() => {
+    el.style.opacity = '0';
+    setTimeout(() => { el.style.display = 'none'; if (onDone) onDone(); }, 500);
+  }, d.duration_ms || 2800);
+}
+
+function _cinemaArt() {
+  return `<svg viewBox="0 0 400 160" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%;background:linear-gradient(180deg,#03050e,#070b1c)"><rect x="0" y="115" width="400" height="45" fill="#04060f"/><rect x="10" y="76" width="28" height="39" fill="#05070e"/><rect x="50" y="63" width="40" height="52" fill="#040710"/><rect x="108" y="52" width="30" height="63" fill="#05081a"/><rect x="155" y="68" width="48" height="47" fill="#040710"/><rect x="222" y="57" width="36" height="58" fill="#050a1a"/><rect x="278" y="74" width="44" height="41" fill="#04070e"/><rect x="340" y="60" width="30" height="55" fill="#050918"/><rect x="17" y="88" width="5" height="6" fill="#f9e2af" opacity="0.48"/><rect x="124" y="70" width="4" height="5" fill="#f9e2af" opacity="0.3"/><rect x="238" y="76" width="5" height="5" fill="#f9e2af" opacity="0.42"/><line x1="20" y1="0" x2="14" y2="30" stroke="#3a6ab0" stroke-width="0.6" opacity="0.28"/><line x1="60" y1="0" x2="54" y2="36" stroke="#3a6ab0" stroke-width="0.5" opacity="0.38"/><line x1="110" y1="0" x2="103" y2="40" stroke="#3a6ab0" stroke-width="0.7" opacity="0.24"/><line x1="160" y1="0" x2="154" y2="34" stroke="#3a6ab0" stroke-width="0.6" opacity="0.34"/><line x1="210" y1="0" x2="203" y2="38" stroke="#3a6ab0" stroke-width="0.5" opacity="0.28"/><line x1="260" y1="0" x2="254" y2="36" stroke="#3a6ab0" stroke-width="0.7" opacity="0.38"/><line x1="310" y1="0" x2="304" y2="38" stroke="#3a6ab0" stroke-width="0.6" opacity="0.24"/><line x1="360" y1="0" x2="355" y2="34" stroke="#3a6ab0" stroke-width="0.5" opacity="0.34"/><line x1="40" y1="0" x2="33" y2="44" stroke="#3a6ab0" stroke-width="0.4" opacity="0.18"/><line x1="90" y1="0" x2="84" y2="40" stroke="#3a6ab0" stroke-width="0.6" opacity="0.28"/><line x1="140" y1="0" x2="134" y2="38" stroke="#3a6ab0" stroke-width="0.5" opacity="0.38"/><line x1="190" y1="0" x2="184" y2="44" stroke="#3a6ab0" stroke-width="0.7" opacity="0.24"/><line x1="240" y1="0" x2="234" y2="40" stroke="#3a6ab0" stroke-width="0.5" opacity="0.32"/><line x1="290" y1="0" x2="284" y2="36" stroke="#3a6ab0" stroke-width="0.6" opacity="0.28"/><line x1="340" y1="0" x2="335" y2="42" stroke="#3a6ab0" stroke-width="0.4" opacity="0.18"/><line x1="380" y1="0" x2="375" y2="34" stroke="#3a6ab0" stroke-width="0.6" opacity="0.38"/></svg>`;
+}
+
+function showCinematic() {
+  const el  = document.getElementById('cinema-overlay');
+  const art = document.getElementById('cinema-art');
+  const c = ASSET_DATA.cinema || {};
+  if (!el) return;
+  if (art) {
+    art.innerHTML = c.image
+      ? imageTagWithLegacyFallback(c.image, 'cover')
+      : _cinemaArt();
+  }
+  const sub = document.querySelector('.cinema-sub');
+  const title = document.querySelector('.cinema-title');
+  const place = document.querySelector('.cinema-place');
+  const txt = document.querySelector('.cinema-text');
+  if (sub && c.studio) sub.textContent = c.studio;
+  if (title && c.title) title.textContent = c.title;
+  if (place && c.place) place.textContent = c.place;
+  if (txt && c.text) txt.innerHTML = c.text;
+  el.style.transition = '';
+  el.style.opacity    = '1';
+  el.style.display    = 'flex';
+}
+
+function closeCinematic() {
+  const el = document.getElementById('cinema-overlay');
+  if (!el) return;
+  el.style.transition = 'opacity .7s';
+  el.style.opacity    = '0';
+  setTimeout(() => { el.style.display = 'none'; }, 720);
+}
+
+// ── WA CONTACTS INIT ──────────────────────────────────────────────────────
+function initWA() {
+  const contacts = ASSET_DATA.contacts || {
+    dani: { name: 'Dani', avatar: 'D', color: '#25d366', status: 'en línea' }
+  };
+  G.waContacts = {};
+  for (const [id, c] of Object.entries(contacts)) {
+    G.waContacts[id] = {
+      name: c.name || id,
+      avatar: c.avatar || (c.name || id).slice(0,1).toUpperCase(),
+      color: c.color || '#25d366',
+      status: c.status || '',
+      messages: id === 'dani' ? G.personalFeed : (c.messages || []),
+      unread: c.unread || 0
+    };
+  }
+  G.waActive = (ASSET_DATA.whatsapp && ASSET_DATA.whatsapp.default_contact) || Object.keys(G.waContacts)[0] || 'dani';
+}
+
+
+
+boot();

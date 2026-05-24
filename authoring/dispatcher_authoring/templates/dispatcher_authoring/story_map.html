@@ -1,0 +1,472 @@
+﻿{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}Story Map — {{ current_project.name|default:"Sin proyecto" }}{% endblock %}
+
+{% block extrahead %}
+{{ block.super }}
+<style>
+/* ============================================================
+   LAYOUT GENERAL
+   ============================================================ */
+#content { max-width: 100% !important; padding: 0 !important; }
+#content-main { padding: 0 !important; }
+
+.sm-root {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  grid-template-columns: 1fr;
+  height: calc(100vh - 56px);
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 13px;
+  background: #f0f4f8;
+}
+
+.sm-topbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  background: #0f172a;
+  color: #f8fafc;
+  flex-wrap: wrap;
+  z-index: 10;
+}
+.sm-topbar h1 { font-size: 15px; font-weight: 700; color: #fff; margin: 0; white-space: nowrap; }
+.sm-topbar .sep { color: #475569; }
+.sm-topbar select, .sm-topbar input[type=text] {
+  background: #334155; color: #e2e8f0; border: 1px solid #475569;
+  padding: 4px 8px; border-radius: 5px; font-size: 12px;
+}
+.sm-topbar input[type=text] { width: 220px; }
+.sm-topbar input[type=text]::placeholder { color: #94a3b8; }
+
+.sm-filters { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.filter-btn {
+  padding: 3px 10px; border-radius: 20px; border: 1px solid #475569;
+  background: transparent; color: #cbd5e1; cursor: pointer; font-size: 11px;
+  transition: all .15s;
+}
+.filter-btn:hover { background: #334155; }
+.filter-btn.active { background: #3b82f6; border-color: #3b82f6; color: #fff; }
+.filter-btn.warn-btn.active { background: #f59e0b; border-color: #f59e0b; color: #fff; }
+
+.sm-warn-pill {
+  background: #dc2626; color: #fff; border-radius: 20px;
+  padding: 2px 8px; font-size: 11px; font-weight: 700;
+  margin-left: 4px;
+}
+
+.sm-panels {
+  display: grid;
+  grid-template-columns: 280px 1fr 340px;
+  overflow: hidden;
+}
+
+/* ============================================================
+   PANEL BASE
+   ============================================================ */
+.sm-panel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-right: 1px solid #cbd5e1;
+}
+.sm-panel-header {
+  background: #e2e8f0; border-bottom: 1px solid #cbd5e1;
+  padding: 7px 12px; font-weight: 700; font-size: 11px;
+  color: #475569; letter-spacing: .06em; text-transform: uppercase;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.sm-panel-body { overflow-y: auto; overflow-x: hidden; flex: 1; }
+
+/* ============================================================
+   LEFT — TREE
+   ============================================================ */
+.tree-section { border-bottom: 1px solid #e2e8f0; }
+.tree-section-head {
+  display: flex; align-items: center; gap: 6px;
+  padding: 7px 10px; cursor: pointer; user-select: none;
+  font-weight: 600; font-size: 12px; background: #f8fafc;
+  color: #334155;
+}
+.tree-section-head:hover { background: #e2e8f0; }
+.tree-toggle { font-size: 10px; color: #94a3b8; width: 12px; }
+.tree-body { padding: 2px 0 6px 0; display: none; }
+.tree-body.open { display: block; }
+
+.tree-item {
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 10px 4px 20px; cursor: pointer;
+  color: #374151; line-height: 1.3;
+  transition: background .1s;
+}
+.tree-item:hover { background: #dbeafe; }
+.tree-item.selected { background: #bfdbfe; font-weight: 600; }
+.tree-item.has-warning { border-left: 3px solid #f59e0b; padding-left: 17px; }
+.tree-item .scene-id { font-family: monospace; font-size: 11px; color: #6b7280; }
+.tree-item .item-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.tree-sub { padding: 2px 0 2px 12px; }
+.tree-sub-item {
+  display: flex; align-items: center; gap: 5px;
+  padding: 3px 10px 3px 20px; cursor: pointer; color: #6b7280;
+  font-size: 11px;
+}
+.tree-sub-item:hover { background: #f0f9ff; color: #1e40af; }
+.tree-sub-item.selected { background: #dbeafe; color: #1e40af; }
+
+/* ============================================================
+   CENTER — FLOW
+   ============================================================ */
+.flow-panel { background: #f8fafc; border-right: none; }
+.flow-canvas-wrap {
+  width: 100%; height: 100%; overflow: hidden;
+  padding: 0;
+  box-sizing: border-box;
+  cursor: default;
+  user-select: none;
+  -webkit-user-select: none;
+  position: relative;
+}
+#flow-canvas {
+  transform-origin: 0 0;
+  will-change: transform;
+  display: inline-block;
+}
+.flow-canvas-wrap svg { display: block; }
+
+/* Node hover/drag highlight */
+.flow-node rect { transition: filter .12s; }
+.flow-node:hover rect { filter: brightness(0.93); }
+.flow-node.selected rect { stroke-width: 3 !important; filter: drop-shadow(0 0 5px rgba(29,78,216,.45)); }
+
+/* Flow toolbar */
+.flow-toolbar { display: flex; align-items: center; gap: 4px; }
+.flow-toolbar button {
+  background: #f1f5f9; border: 1px solid #cbd5e1; color: #374151;
+  padding: 3px 9px; border-radius: 4px; font-size: 11px; cursor: pointer;
+  font-weight: 600; white-space: nowrap;
+}
+.flow-toolbar button:hover { background: #e2e8f0; border-color: #94a3b8; }
+
+/* ============================================================
+   RIGHT — INSPECTOR
+   ============================================================ */
+.inspector-panel { background: #fff; }
+.inspector-empty {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  height: 100%; color: #64748b; gap: 8px; padding: 24px;
+}
+.inspector-empty svg { opacity: .3; }
+
+.insp-section { border-bottom: 1px solid #e2e8f0; padding: 14px 16px; }
+.insp-title { font-size: 17px; font-weight: 800; color: #0f172a; margin-bottom: 6px; }
+.insp-id { font-family: monospace; font-size: 12px; color: #334155; margin-bottom: 10px; }
+.insp-meta { font-size: 13px; color: #0f172a; line-height: 1.8; }
+.insp-meta b { color: #1e293b; }
+.insp-objective { font-size: 12px; color: #334155; font-style: italic; margin-top: 6px; }
+
+.insp-sub-title { font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .06em; color: #475569; margin-bottom: 8px; }
+
+.beat-item {
+  padding: 5px 8px; border-radius: 5px; margin-bottom: 4px;
+  background: #f8fafc; border: 1px solid #e2e8f0;
+  font-size: 11px; line-height: 1.5; color: #1e293b;
+}
+.beat-item .beat-speaker { font-weight: 700; color: #1e40af; }
+.beat-item .beat-text { color: #1e293b; }
+.beat-item.beat-narration { background: #fef3c7; border-color: #d97706; color: #78350f; }
+.beat-item.beat-input { background: #f0fdf4; border-color: #86efac; }
+.beat-item.beat-tool { background: #fdf4ff; border-color: #d8b4fe; }
+.beat-item.beat-vignette { background: #fff7ed; border-color: #fdba74; }
+.beat-item.beat-wa { background: #ecfeff; border-color: #67e8f9; }
+.beat-item.beat-sfx { background: #eef2ff; border-color: #a5b4fc; }
+.beat-item.beat-ambient { background: #f0fdf4; border-color: #86efac; }
+
+.scene-vig-pill {
+  display: inline-block;
+  font-size: 10px;
+  color: #9a3412;
+  background: #fff7ed;
+  border: 1px solid #fdba74;
+  border-radius: 10px;
+  padding: 1px 6px;
+  margin-left: 6px;
+}
+
+.choice-item { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 5px; padding: 6px 10px; margin-bottom: 6px; }
+.choice-item .choice-prompt { font-weight: 600; color: #1e40af; font-size: 11px; margin-bottom: 4px; }
+.choice-opt { font-size: 11px; color: #374151; padding: 1px 0; }
+.choice-opt .goto-link { font-family: monospace; color: #6b7280; }
+.choice-opt .goto-link.broken { color: #dc2626; }
+
+.insp-edit-btn {
+  display: inline-block; margin-top: 4px;
+  background: #1d4ed8; color: #ffffff !important; border: none; border-radius: 5px;
+  padding: 5px 14px; font-size: 12px; cursor: pointer; text-decoration: none !important;
+  font-weight: 700; letter-spacing: .01em;
+}
+.insp-edit-btn:hover { background: #1e40af; color: #ffffff !important; }
+
+.field-pill {
+  display: inline-block; font-family: monospace; font-size: 10px;
+  background: #f0fdf4; border: 1px solid #86efac; color: #166534;
+  border-radius: 4px; padding: 1px 6px; margin: 2px 2px 2px 0;
+}
+.tool-pill {
+  display: inline-block; font-family: monospace; font-size: 10px;
+  background: #fdf4ff; border: 1px solid #d8b4fe; color: #6b21a8;
+  border-radius: 4px; padding: 1px 6px; margin: 2px 2px 2px 0;
+}
+
+/* ============================================================
+   BADGES
+   ============================================================ */
+.badge {
+  display: inline-flex; align-items: center;
+  font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 4px;
+  letter-spacing: .04em; white-space: nowrap;
+}
+.badge-global   { background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; }
+.badge-case     { background: #f5f3ff; color: #6d28d9; border: 1px solid #ddd6fe; }
+.badge-scene    { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
+.badge-911      { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
+.badge-choice   { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; }
+.badge-input    { background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
+.badge-toolsearch { background: #fefce8; color: #854d0e; border: 1px solid #fde047; }
+.badge-dispatch { background: #fff1f2; color: #9f1239; border: 1px solid #fecdd3; }
+.badge-asset    { background: #f5f3ff; color: #5b21b6; border: 1px solid #c4b5fd; font-weight: 700; }
+.badge-narration { background: #fef08a; color: #78350f; border: 1px solid #d97706; }
+.badge-orphan   { background: #fffbeb; color: #92400e; border: 1px solid #fde68a; }
+.badge-sfx      { background: #eef2ff; color: #3730a3; border: 1px solid #818cf8; }
+.badge-ambient  { background: #f0fdf4; color: #14532d; border: 1px solid #4ade80; }
+
+/* ============================================================
+   WARNINGS PANEL
+   ============================================================ */
+.warnings-list { padding: 8px 12px; }
+.warn-item {
+  display: flex; gap: 8px; align-items: flex-start;
+  padding: 6px 8px; margin-bottom: 5px; border-radius: 5px;
+  font-size: 11px; cursor: pointer;
+}
+.warn-item.severity-error   { background: #fef2f2; border-left: 3px solid #ef4444; }
+.warn-item.severity-warning { background: #fffbeb; border-left: 3px solid #f59e0b; }
+.warn-item:hover { filter: brightness(.97); }
+.warn-scene { font-family: monospace; font-weight: 700; color: #374151; min-width: 80px; }
+.warn-detail { color: #6b7280; flex: 1; }
+.warn-icon { font-size: 13px; }
+
+/* ============================================================
+   SEARCH HIGHLIGHT
+   ============================================================ */
+.search-highlight { background: #fde047; border-radius: 2px; }
+.tree-item.search-hidden, .beat-item.search-hidden { display: none; }
+
+/* ============================================================
+   TIMELINE DE BEATS
+   ============================================================ */
+.tl-choice-wrap {
+  margin: 3px 0 5px 14px;
+  position: relative;
+}
+.tl-choice-wrap::before {
+  content: '';
+  position: absolute;
+  left: -8px; top: 0; bottom: 0;
+  border-left: 2px dashed #93c5fd;
+}
+.tl-choice-detail {
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  background: #eff6ff;
+  overflow: hidden;
+}
+.tl-choice-detail > summary {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 10px;
+  font-size: 11px; font-weight: 700; color: #1e40af;
+  cursor: pointer; list-style: none; user-select: none;
+}
+.tl-choice-detail > summary::-webkit-details-marker { display: none; }
+.tl-choice-detail > summary::before {
+  content: '▶'; font-size: 9px; color: #93c5fd;
+  flex-shrink: 0; transition: transform .12s;
+}
+.tl-choice-detail[open] > summary::before { content: '▼'; }
+.tl-choice-prompt { flex: 1; min-width: 0; }
+.tl-choice-edit { font-size: 10px; color: #3b82f6; text-decoration: none; flex-shrink: 0; }
+.tl-choice-edit:hover { text-decoration: underline; }
+.tl-choice-body { padding: 4px 8px 8px; }
+
+.tl-option {
+  margin-bottom: 5px;
+  border: 1px solid #ddd6fe;
+  border-radius: 4px;
+  background: #f5f3ff;
+  overflow: hidden;
+}
+.tl-option-detail > summary {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 8px;
+  font-size: 11px; font-weight: 600; color: #5b21b6;
+  cursor: pointer; list-style: none; user-select: none;
+}
+.tl-option-detail > summary::-webkit-details-marker { display: none; }
+.tl-option-detail > summary::before {
+  content: '▶'; font-size: 9px; color: #a78bfa; flex-shrink: 0;
+}
+.tl-option-detail[open] > summary::before { content: '▼'; }
+.tl-option-nobeats {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 8px; font-size: 11px; font-weight: 600; color: #5b21b6;
+}
+.tl-opt-label { flex: 1; min-width: 0; }
+.tl-opt-goto {
+  font-family: monospace; font-size: 10px;
+  background: #ede9fe; color: #6b21a8;
+  padding: 1px 6px; border-radius: 3px; flex-shrink: 0;
+}
+.tl-opt-goto.broken { background: #fef2f2; color: #dc2626; }
+.tl-opt-goto.continues { background: #ecfdf5; color: #059669; }
+.tl-opt-edit { font-size: 10px; color: #3b82f6; text-decoration: none; flex-shrink: 0; }
+.tl-opt-edit:hover { text-decoration: underline; }
+.tl-option-beats {
+  padding: 6px 8px 4px;
+  border-top: 1px solid #ddd6fe;
+  background: #faf5ff;
+}
+.tl-option-beats .beat-item { margin-bottom: 3px; font-size: 10.5px; }
+
+/* Beat category left-border (readonly / action / transition) */
+.beat-item.cat-readonly   { border-left: 3px solid #86efac; }
+.beat-item.cat-action     { border-left: 3px solid #f87171; }
+.beat-item.cat-transition { border-left: 3px solid #fbbf24; }
+
+/* Scene beat summary strip */
+.beat-summary {
+  display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
+  font-size: 11px; padding: 5px 10px;
+  background: #f8fafc; border-radius: 5px; border: 1px solid #e2e8f0;
+  margin-top: 8px; color: #475569;
+}
+.beat-summary .bs-sep { color: #cbd5e1; }
+.beat-summary .bs-action b { color: #dc2626; }
+.beat-summary .bs-transition b { color: #d97706; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% if not story_data %}
+<div style="padding:40px; text-align:center; color:#6b7280;">
+  <h2>No hay proyectos en la base de datos.</h2>
+  <p>Ejecuta <code>python manage.py import_dispatcher_json</code> para importar datos.</p>
+</div>
+{% else %}
+
+{{ story_data|json_script:"story-data" }}
+
+<div class="sm-root">
+
+  <!-- TOP BAR -->
+  <div class="sm-topbar">
+    <h1>🗺 Story Map</h1>
+    <span class="sep">|</span>
+
+    {% if projects|length > 1 %}
+    <select onchange="location='?project='+this.value" title="Proyecto">
+      {% for p in projects %}
+      <option value="{{ p.id }}" {% if p.id == current_project.id %}selected{% endif %}>{{ p.name }}</option>
+      {% endfor %}
+    </select>
+    {% else %}
+    <span style="color:#94a3b8; font-size:12px;">{{ current_project.name }}</span>
+    {% endif %}
+
+    <span class="sep">|</span>
+
+    <input type="text" id="search-input" placeholder="Buscar scene_id, título, texto de beat…"
+           oninput="doSearch(this.value)" />
+
+    <span class="sep">|</span>
+
+    <div class="sm-filters">
+      <span style="font-size:11px; color:#94a3b8;">Filtro:</span>
+      <button class="filter-btn active" data-filter="all" onclick="setFilter('all',this)">Todo</button>
+      <button class="filter-btn" data-filter="911" onclick="setFilter('911',this)">Solo 911</button>
+      {% for case in current_project.cases.all %}
+      <button class="filter-btn" data-filter="case-{{ case.case_id }}" onclick="setFilter('case-{{ case.case_id }}',this)">Case: {{ case.case_id }}</button>
+      {% endfor %}
+      <button class="filter-btn warn-btn" data-filter="warnings" onclick="setFilter('warnings',this)">
+        Warnings <span id="warn-count-pill" class="sm-warn-pill">0</span>
+      </button>
+    </div>
+
+    <a href="{% url 'dispatcher_studio_map' %}{% if current_project %}?project={{ current_project.id }}{% endif %}"
+       style="margin-left:auto; background:#2563eb; color:#fff; border:none; border-radius:6px; padding:4px 14px; font-size:12px; font-weight:700; cursor:pointer; text-decoration:none; display:inline-flex; align-items:center; gap:5px; white-space:nowrap;"
+       title="Abrir Studio de pantalla completa">&#9674; Studio</a>
+  </div>
+
+  <!-- THREE PANELS -->
+  <div class="sm-panels">
+
+    <!-- LEFT: TREE -->
+    <div class="sm-panel" id="tree-panel">
+      <div class="sm-panel-header">
+        <span>Árbol del proyecto</span>
+        <button onclick="expandAll()" style="background:none;border:none;cursor:pointer;color:#64748b;font-size:11px;">Expandir todo</button>
+      </div>
+      <div class="sm-panel-body" id="tree-body">
+        <!-- Rendered by JS -->
+      </div>
+    </div>
+
+    <!-- CENTER: FLOW -->
+    <div class="sm-panel flow-panel" id="flow-panel">
+      <div class="sm-panel-header">
+        <span>Flujo de escenas</span>
+        <span id="flow-legend" style="font-size:10px; color:#64748b; font-weight:400; letter-spacing:0;">
+          <span style="color:#3b82f6;">&#8594;</span> siguiente &nbsp;
+          <span style="color:#8b5cf6;">&#8594;</span> choice &nbsp;
+          <span style="background:#fef3c7; border:1px solid #f59e0b; border-radius:3px; padding:0 4px;">aislada</span>
+        </span>
+        <span class="flow-toolbar">
+          <button onclick="resetFlowLayout()" title="Restablecer layout autom&#225;tico">&#8635; Auto</button>
+          <button onclick="fitFlowView()" title="Ajustar a la ventana">&#9633; Fit</button>
+          <button onclick="adjustZoom(1.2)">+</button>
+          <button onclick="adjustZoom(0.8)">&minus;</button>
+        </span>
+      </div>
+      <div class="flow-canvas-wrap" id="flow-canvas-wrap">
+        <div id="flow-canvas"></div>
+      </div>
+    </div>
+
+    <!-- RIGHT: INSPECTOR -->
+    <div class="sm-panel inspector-panel" id="inspector-panel">
+      <div class="sm-panel-header">
+        <span>Inspector</span>
+        <button id="insp-close-btn" onclick="clearInspector()" style="background:none;border:none;cursor:pointer;color:#64748b;font-size:16px;display:none;">×</button>
+      </div>
+      <div class="sm-panel-body" id="inspector-body">
+        <div class="inspector-empty">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+          </svg>
+          <span>Haz clic en una escena,<br>caso o asset para ver detalles.</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+{% include 'dispatcher_authoring/_story_map_js.html' %}
+</script>
+
+{% endif %}
+{% endblock %}

@@ -1,0 +1,132 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "dispatcher_assets.schema.json",
+  "title": "Dispatcher Assets",
+  "description": "Recursos multimedia, configuración de viñetas, cinemática de apertura y contactos de WhatsApp.",
+  "type": "object",
+  "properties": {
+
+    "audio": {
+      "type": "object",
+      "description": "Rutas a los archivos de audio del juego",
+      "properties": {
+
+        "music": {
+          "type": "object",
+          "description": "Pistas de música ambiente. Se reproducen en loop.",
+          "properties": {
+            "rain":    { "type": "string", "description": "Música ambiente lluvia (escenas de narración)" },
+            "office":  { "type": "string", "description": "Música de oficina tranquila" },
+            "tension": { "type": "string", "description": "Música de tensión (escenas 911 / despacho)" }
+          },
+          "additionalProperties": { "type": "string" }
+        },
+
+        "sfx": {
+          "type": "object",
+          "description": "Efectos de sonido puntuales. Clave debe coincidir con beat.sfx en el guion.",
+          "properties": {
+            "inicio":   { "type": "string", "description": "Sonido al iniciar el juego" },
+            "notif":    { "type": "string", "description": "Sonido de notificación genérica" },
+            "message":  { "type": "string", "description": "Sonido al recibir un mensaje" },
+            "error":    { "type": "string", "description": "Sonido de error o descubrimiento" },
+            "confirm":  { "type": "string", "description": "Sonido de confirmación / acción completada" },
+            "dispatch": { "type": "string", "description": "Sonido al activar el panel de despacho" },
+            "911":      { "type": "string", "description": "Sonido de llamada entrante en Canal 911" }
+          },
+          "additionalProperties": { "type": "string" }
+        }
+
+      }
+    },
+
+    "vignettes": {
+      "type": "object",
+      "description": "Imágenes de viñeta cinemática. Cada clave debe coincidir con beat.scene en los beats de tipo 'vignette'.",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["image"],
+        "properties": {
+          "image": {
+            "type": "string",
+            "description": "Ruta relativa a la imagen (desde la carpeta raíz del proyecto)"
+          },
+          "label": {
+            "type": "string",
+            "description": "Texto de location stamp (ej: PROVIDENCIA · CHILE)"
+          },
+          "subtitle": {
+            "type": "string",
+            "description": "Subtítulo descriptivo de la viñeta"
+          }
+        }
+      }
+    },
+
+    "cinema": {
+      "type": "object",
+      "description": "Configuración de la pantalla de apertura cinemática (splash screen con texto superpuesto)",
+      "properties": {
+        "image":  { "type": "string", "description": "Imagen de fondo de la cinemática de apertura" },
+        "studio": { "type": "string", "description": "Nombre del estudio (ej: kabu studio)" },
+        "title":  { "type": "string", "description": "Título del juego" },
+        "place":  { "type": "string", "description": "Lugar y hora de inicio (ej: Providencia · Chile · 21:11)" },
+        "text": {
+          "type": "string",
+          "description": "Texto narrativo de apertura. Soporta HTML básico para saltos de línea (<br>)."
+        }
+      }
+    },
+
+    "whatsapp": {
+      "type": "object",
+      "description": "Configuración del módulo WhatsApp personal",
+      "properties": {
+        "default_contact": {
+          "type": "string",
+          "description": "ID del contacto activo por defecto. Debe existir en 'contacts'."
+        }
+      }
+    },
+
+    "contacts": {
+      "type": "object",
+      "description": "Contactos disponibles en el módulo WhatsApp. Cada clave es el ID del contacto.",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Nombre que se muestra en el chat"
+          },
+          "avatar": {
+            "type": "string",
+            "description": "Inicial o símbolo que aparece en el avatar"
+          },
+          "color": {
+            "type": "string",
+            "pattern": "^#[0-9a-fA-F]{3,8}$",
+            "description": "Color del avatar en hexadecimal (ej: #25d366)"
+          },
+          "status": {
+            "type": "string",
+            "description": "Texto de estado del contacto (ej: en línea)"
+          },
+          "messages": {
+            "type": "array",
+            "description": "Mensajes iniciales del contacto (si se pre-cargan en assets)",
+            "items": {
+              "type": "object",
+              "properties": {
+                "speaker": { "type": "string" },
+                "text":    { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    }
+
+  }
+}
