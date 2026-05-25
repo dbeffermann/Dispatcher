@@ -294,64 +294,18 @@
       ],
       "choices": [
         {
-          "at": 9,
+          "at": 8,
           "prompt": "¿Qué vas a hacer? ¿Buscar ayuda en el manual o improvisar?",
           "options": [
             {
               "label": "Buscar ayuda en el manual",
-              "beats": [
-                {
-                  "kind": "narration",
-                  "text": "Eric toma el manual y empieza a pasar las hojas. Pasa y pasa y pasa."
-                },
-                {
-                  "speaker": "MENSAJE",
-                  "text": "¡Aló, por favor, necesito ayuda!"
-                },
-                {
-                  "speaker": "ERIC",
-                  "text": "Eh, sí, un segundo, un segundo, por favor"
-                },
-                {
-                  "speaker": "MENSAJE",
-                  "text": "¡Cómo que un segundo! ¡Necesito ayuda! ¿A quién acabo de llamar? ¡A la asociación de giles unidos!"
-                },
-                {
-                  "speaker": "ERIC",
-                  "text": "Eh, sí, lo que pasa es que..."
-                },
-                {
-                  "speaker": "MENSAJE",
-                  "text": "¿Qué, po, cabro? ¿Te pillé viendo porno o algo? ¿Tengo que volver a repetirlo? ¡Necesito-ayuda!"
-                },
-                {
-                  "speaker": "ERIC",
-                  "text": "Eh..."
-                },
-                {
-                  "kind": "narration",
-                  "text": "Eric transpira. No encuentra nada, pero de pronto el título: ¿CÓMO RESPONDER UN LLAMADO? – RESPUESTA GENERAL."
-                },
-                {
-                  "kind": "narration",
-                  "text": "Eric escribe..."
-                },
-                {
-                  "speaker": "ERIC",
-                  "text": "Hola, sí, Centro de Comunicaciones de Emergencia. Mi nombre es Eric... ¿cuál es su emergencia?"
-                },
-                {
-                  "speaker": "MENSAJE",
-                  "text": "¡Mi emergencia, Eric, es que me hiciste perder cinco minutos esperando cuando ya podrías haber despachado una unidad a buscar el auto que me acaban de robar! ¡Esa es mi emergencia, Eric!"
-                }
-              ],
-              "goto": "manual_search"
+              "goto": "manual_search",
+              "beats": []
             }
           ]
         }
       ],
-      "channel": "911",
-      "case_id": "tutorial_mirna_auto_robado"
+      "channel": "911"
     },
     {
       "id": "dani_chat",
@@ -360,11 +314,19 @@
       "beats": [
         {
           "kind": "narration",
-          "text": "Eric mira la pantalla del computador. Fijo. No pasa nada. No entra ningún mensaje. No sabe qué hacer."
+          "text": "Eric mira la pantalla del computador. Fijo. No pasa nada. No entra ningún mensaje. No sabe qué hacer. [TEST STORY MAP E2E]"
         },
         {
-          "kind": "narration",
+          "kind": "vignette",
+          "action": "open",
+          "scene": "mensaje_dani",
           "text": "Eric toma su teléfono y busca un contacto: DANI. Abre el chat y escribe: 'Llegué'."
+        },
+        {
+          "kind": "wa",
+          "contact": "dani",
+          "speaker": "ERIC",
+          "text": "Llegué"
         },
         {
           "kind": "narration",
@@ -377,90 +339,13 @@
       ],
       "choices": [
         {
-          "at": 4,
+          "at": 5,
           "prompt": "¿Qué vas a hacer? ¿Mentirle o decirle la verdad?",
           "options": [
             {
               "label": "Decirle la verdad",
-              "beats": [
-                {
-                  "speaker": "ERIC",
-                  "text": "O sea... como hace 15 minutos"
-                },
-                {
-                  "speaker": "DANI",
-                  "text": "O sea que llegaste tarde"
-                },
-                {
-                  "speaker": "ERIC",
-                  "text": "No fue mi culpa, Dani, se había tirado alguien al metro y tuve que correr desde Los Héroes"
-                },
-                {
-                  "kind": "narration",
-                  "text": "La cara de preocupación de Eric se ve reflejada en la pantalla del celular."
-                },
-                {
-                  "speaker": "DANI",
-                  "text": "Siempre es culpa de alguien más, Eric... pero que bueno que me dijiste la verdad"
-                },
-                {
-                  "kind": "narration",
-                  "text": "Eric sonríe."
-                },
-                {
-                  "speaker": "ERIC",
-                  "text": "Con la plata te voy a llevar al sushi que te gusta"
-                },
-                {
-                  "speaker": "DANI",
-                  "text": "Más te vale. Me costó un montón que te dieran la pega"
-                },
-                {
-                  "speaker": "ERIC",
-                  "text": "Te amo"
-                },
-                {
-                  "kind": "narration",
-                  "text": "escribiendo..."
-                },
-                {
-                  "speaker": "DANI",
-                  "text": "Yo también y ya, deja de hablarme y concéntrate que esto no es fácil. La gente que llama depende de que tomes buenas decisiones y... no digamos que ese es tu fuerte tampoco"
-                },
-                {
-                  "kind": "narration",
-                  "text": "Eric mira la pantalla, avergonzado."
-                },
-                {
-                  "speaker": "ERIC",
-                  "text": "Ya. ¿Te puedo escribir si necesito ayuda?"
-                },
-                {
-                  "speaker": "DANI",
-                  "text": "Sí. Yo voy a pasar de largo hoy día. Me queda un montón de materia por repasar todavía. ¿Te pasaron el manual?"
-                },
-                {
-                  "speaker": "ERIC",
-                  "text": "Me lo pasaron, sí"
-                },
-                {
-                  "speaker": "DANI",
-                  "text": "Bien. Si todavía no te han llegado mensajes, ponte a leerlo. Te va a ayudar más que yo"
-                },
-                {
-                  "speaker": "ERIC",
-                  "text": "Bueno"
-                },
-                {
-                  "speaker": "DANI",
-                  "text": "Hazlo, Eric. Y no-te pongas-a dibujar, ¿ya?"
-                },
-                {
-                  "speaker": "ERIC",
-                  "text": "(L)"
-                }
-              ],
-              "goto": "pre_alert"
+              "goto": "pre_alert",
+              "beats": []
             }
           ]
         }
@@ -489,8 +374,7 @@
         }
       ],
       "next": "outro",
-      "channel": "911",
-      "case_id": "tutorial_mirna_auto_robado"
+      "channel": "911"
     },
     {
       "id": "first_alert",
@@ -535,35 +419,46 @@
         }
       ],
       "next": "call_fragment",
-      "channel": "narration",
-      "case_id": "tutorial_mirna_auto_robado"
+      "channel": "narration"
     },
     {
       "id": "intro",
-      "title": "Llegada a la Oficina",
+      "title": "Escena 1: Eric llega a la oficina",
       "objective": "Establecer el contexto de Eric llegando a su primer día de trabajo",
       "beats": [
         {
-          "kind": "narration",
-          "text": "EN NEGRO. Cae la lluvia, luego pasos y una respiración acelerada."
+          "kind": "ambient",
+          "ambient": "office"
         },
         {
           "kind": "vignette",
           "action": "open",
-          "scene": "eric_corre_1",
-          "text": "EXT. CIUDAD - NOCHE OTOÑAL. Un joven de unos veinte años corre por la calle esquivando peatones. El es ERIC."
+          "scene": "eric_llega_puerta_oficina",
+          "text": "Eric entra a la oficina iluminada y ve varios cubículos. De pronto ve a un HOMBRE pasar. Sin entrar..."
         },
         {
           "speaker": "ERIC",
-          "text": "Permiso. Perdón. Permiso."
+          "text": "Eh..."
         },
         {
           "kind": "narration",
-          "text": "Eric tiene un morral colgándole del hombro. En un momento se le engancha con un poste, se le raja y se le caen algunas cosas. Las recoje mientras mira los edificios."
+          "text": "El hombre lo mira y lo apunta."
+        },
+        {
+          "speaker": "HOMBRE",
+          "text": "¿Eric?"
         },
         {
           "kind": "narration",
-          "text": "EXT. EDIFICIO. Mirando su teléfono se detiene frente a un edificio casi apagado. Solo una luz está encendida. Corre."
+          "text": "Eric asiente. El hombre mira un reloj en la pared que dice que son las 21:11."
+        },
+        {
+          "speaker": "HOMBRE",
+          "text": "Primer día y llegaste tarde, po, Eric."
+        },
+        {
+          "speaker": "ERIC",
+          "text": "Sí, perdón, yo..."
         }
       ],
       "next": "supervisor",
@@ -611,7 +506,8 @@
           "field": "local",
           "setValue": "Rossie La Loca",
           "answer": "rossie",
-          "hint": "Anotá el nombre del local que mencionó la llamante"
+          "hint": "Anotá el nombre del local que mencionó la llamante",
+          "errorMsg": "❌ Ese no es el local. Escuchá bien: Mirna dijo que fue a un local en Tobalaba."
         }
       ],
       "choices": [
@@ -621,129 +517,13 @@
           "options": [
             {
               "label": "Responderle",
-              "beats": [
-                {
-                  "speaker": "ERIC",
-                  "text": "¿Sí, señora?"
-                },
-                {
-                  "speaker": "MENSAJE",
-                  "text": "Acabo de concretar mi tercer divorcio, Eric. Es señorita de nuevo, ¿ya?"
-                },
-                {
-                  "kind": "narration",
-                  "text": "Eric sonríe..."
-                },
-                {
-                  "speaker": "MENSAJE",
-                  "text": "Y mi nombre es Mirna, Eric"
-                },
-                {
-                  "speaker": "ERIC",
-                  "text": "Muy bien... señorita Mirna"
-                },
-                {
-                  "kind": "tool-search",
-                  "tool": "address"
-                },
-                {
-                  "speaker": "ERIC",
-                  "text": "Señorita Mirna, entonces, y según lo que puedo ver en el mapa, usted se encuentra en Av. Tobalaba 947, comuna de Providencia"
-                },
-                {
-                  "speaker": "MENSAJE",
-                  "text": "Ya..."
-                },
-                {
-                  "speaker": "ERIC",
-                  "text": "Señorita Mirna, antes de enviarle a la patrulla, ¿sería tan amable de darme algunos detalles del vehículo?"
-                },
-                {
-                  "speaker": "MENSAJE",
-                  "text": "Bueno, Eric..."
-                },
-                {
-                  "speaker": "ERIC",
-                  "text": "¿Podría darme la patente del vehículo?"
-                },
-                {
-                  "speaker": "MENSAJE",
-                  "text": "Eric, la patente de mi auto es TVBA-20"
-                },
-                {
-                  "kind": "input",
-                  "field": "plate",
-                  "setValue": "TVBA-20",
-                  "answer": "tvba",
-                  "hint": "Anotá la patente del vehículo robado"
-                },
-                {
-                  "speaker": "ERIC",
-                  "text": "Señorita Mirna, ¿podría darme la marca y el modelo del vehículo?"
-                },
-                {
-                  "speaker": "MENSAJE",
-                  "text": "Es un BMW, Eric. Las viejas como yo siempre compramos un BMW, pero... el modelo... no sé, Eric. Eh... a ver... dime qué modelos de BMW conoces a ver si me acuerdo cuál era la cuestión... es uno de esto guatones..."
-                },
-                {
-                  "speaker": "ERIC",
-                  "text": "¿Es un SUV?"
-                },
-                {
-                  "speaker": "MENSAJE",
-                  "text": "Esos, Eric... X algo... no sé cuál..."
-                },
-                {
-                  "speaker": "ERIC",
-                  "text": "Señorita Mirna, ¿se acuerda del precio por último?"
-                },
-                {
-                  "speaker": "MENSAJE",
-                  "text": "Mira, Eric, de los tres hombres en mi vida que ya pasaron ninguno me dejó mucho. Me lo pelearon todo así que Es un BMW SUV, pero tiene que ser el más barato"
-                },
-                {
-                  "kind": "tool-search",
-                  "tool": "vehicle"
-                },
-                {
-                  "speaker": "ERIC",
-                  "text": "Señorita Mirna, según lo que tengo acá, el más económico de la línea SUV de BMW es el modelo X1, ¿le suena correcto?"
-                },
-                {
-                  "speaker": "MENSAJE",
-                  "text": "Suena correcto, Eric"
-                },
-                {
-                  "speaker": "ERIC",
-                  "text": "Señora Mirna, por último, ¿podría darme el color del vehículo?"
-                },
-                {
-                  "speaker": "MENSAJE",
-                  "text": "Blanco, Eric. Y es señorita..."
-                },
-                {
-                  "kind": "input",
-                  "field": "color",
-                  "setValue": "BMW X1 · blanco",
-                  "answer": "blanco",
-                  "hint": "Anotá el color del vehículo"
-                },
-                {
-                  "speaker": "ERIC",
-                  "text": "Señorita..."
-                },
-                {
-                  "speaker": "ERIC",
-                  "text": "Muy bien, señorita Mirna. Con esos datos ya puedo gestionar el despacho de emergencia."
-                }
-              ],
-              "goto": "dispatch_choice"
+              "goto": "dispatch_choice",
+              "beats": []
             }
           ]
         }
       ],
-      "channel": "911",
-      "case_id": "tutorial_mirna_auto_robado"
+      "channel": "911"
     },
     {
       "id": "manual_search",
@@ -829,8 +609,7 @@
         }
       ],
       "next": "investigation",
-      "channel": "911",
-      "case_id": "tutorial_mirna_auto_robado"
+      "channel": "911"
     },
     {
       "id": "outro",
@@ -862,8 +641,7 @@
           "text": "Son las 10:45."
         }
       ],
-      "channel": "narration",
-      "case_id": "tutorial_mirna_auto_robado"
+      "channel": "narration"
     },
     {
       "id": "pre_alert",
@@ -886,37 +664,8 @@
           "options": [
             {
               "label": "Ponerte a dibujar",
-              "beats": [
-                {
-                  "kind": "narration",
-                  "text": "Eric agarra su morral y empieza a sacar cosas. Saca unos audífonos gamer, los conecta a su celular, pone música, saca una libreta, un lápiz y se pone a dibujar."
-                },
-                {
-                  "kind": "narration",
-                  "text": "Mira la pantalla de vez en cuando... nada."
-                },
-                {
-                  "kind": "narration",
-                  "text": "Se siente como pasa el tiempo, dibujando."
-                },
-                {
-                  "kind": "narration",
-                  "text": "En la pantalla nada."
-                },
-                {
-                  "kind": "narration",
-                  "text": "Eric mira una vez más..."
-                },
-                {
-                  "speaker": "ERIC",
-                  "text": "La pega más fácil del mundo"
-                },
-                {
-                  "kind": "narration",
-                  "text": "De pronto, el reloj análogo en la pared da... las diez. Inmediatamente suena una NOTIFICACIÓN."
-                }
-              ],
-              "goto": "first_alert"
+              "goto": "first_alert",
+              "beats": []
             }
           ]
         }
@@ -930,46 +679,18 @@
       "beats": [
         {
           "kind": "vignette",
-          "scene": "office"
-        },
-        {
-          "kind": "narration",
-          "text": "INT. OFICINA. Eric entra a la oficina iluminada y ve varios cubículos. De pronto ve a un HOMBRE pasar. Sin entrar..."
-        },
-        {
-          "speaker": "ERIC",
-          "text": "Eh..."
-        },
-        {
-          "kind": "narration",
-          "text": "El hombre lo mira y lo apunta."
-        },
-        {
-          "speaker": "HOMBRE",
-          "text": "¿Eric?"
-        },
-        {
-          "kind": "narration",
-          "text": "Eric asiente. El hombre mira un reloj en la pared que dice que son las 21:11."
-        },
-        {
-          "speaker": "HOMBRE",
-          "text": "Primer día y llegaste tarde, po, Eric."
-        },
-        {
-          "speaker": "ERIC",
-          "text": "Sí, perdón, yo..."
-        },
-        {
-          "speaker": "HOMBRE",
+          "action": "open",
+          "scene": "office",
           "text": "Da lo mismo. Ven que me tengo que ir yo. Este va a ser tu cubículo."
         },
         {
           "kind": "narration",
-          "text": "El hombre apunta un cubículo con su dedo. INT. CUBÍCULO. Eric se sienta frente a un computador."
+          "text": "Eric se sienta frente a un computador"
         },
         {
-          "speaker": "HOMBRE",
+          "kind": "vignette",
+          "action": "open",
+          "scene": "eric_supervisor_computador",
           "text": "Perfecto, Eric, acá vas tú. Las emergencias acá y el chat acá y... ¿esta es tu primera vez como dispatcher?"
         },
         {
