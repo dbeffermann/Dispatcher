@@ -1840,6 +1840,7 @@ function refreshControls() {
   const cb  = document.getElementById('btn-continue');
   const bc1 = document.getElementById('bc1');
   const bc2 = document.getElementById('bc2');
+  cb.style.display = '';
   cb.classList.remove('pulsing');
   cb.onclick = () => advance();
   bc1.className = 'btn-choice'; bc2.className = 'btn-choice';
@@ -1876,8 +1877,8 @@ function refreshControls() {
   if (G.waitingChoice && G.pendingChoice) {
     if (actionRow) actionRow.className = 'action-choice';
     const opts = G.pendingChoice.options || [];
-    cb.disabled = false; cb.textContent = '↕ Elegir opción';
-    cb.onclick = () => handleBlockedContinue();
+    cb.style.display = 'none';
+    cb.disabled = true;
     if (opts[0]) { bc1.disabled = false; bc1.textContent = opts[0].label; bc1.classList.add('live'); } else { bc1.disabled=true; bc1.textContent=''; }
     if (opts[1]) {
       bc2.style.display = ''; bc2.disabled = false; bc2.textContent = opts[1].label; bc2.classList.add('live');
