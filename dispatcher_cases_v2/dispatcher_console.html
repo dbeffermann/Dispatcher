@@ -1918,7 +1918,7 @@ function refreshStatus() {
   } else if (G.pending911 && G.currentModule !== 'chat') {
     msg = '🚨 Alerta 911 pendiente — revisa Canal 911  [C]'; cls = 's-alert';
   } else if (G.waitingChoice) {
-    msg = '↕  Elige una opción para continuar';
+    msg = '';
   } else {
     const prog = total > 0 ? `  |  ${beat}/${total}` : '';
     msg = `Escena: ${G.currentScene.title || ''}${prog}  |  ESPACIO · clic en CONTINUAR  |  C M P D W para módulos  |  F pantalla completa`;
