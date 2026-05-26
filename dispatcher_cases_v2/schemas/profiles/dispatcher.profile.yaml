@@ -1,0 +1,209 @@
+# =============================================================================
+# LAYER 2 — DISPATCHER GAME PROFILE  (dispatcher.profile.yaml  v1.0)
+# =============================================================================
+#
+# PURPOSE
+#   Game-specific configuration that extends Layer 1 (narrative.schema.yaml)
+#   for the Dispatcher Centro de Comunicaciones game engine.
+#
+# WHAT THIS FILE DEFINES
+#   channels      : valid scene.channel values and their UI chrome
+#   beat_kinds    : valid beat.kind values, required/optional fields,
+#                   and whether each kind is CORE (generic) or game-specific
+#   validations   : cross-scene rules (goto_exists, input_requires_case, etc.)
+#   panels        : runtime UI panels available in the Dispatcher engine
+#
+# WHAT THIS FILE IS NOT
+#   - It does NOT define the narrative primitives (that's Layer 1).
+#   - It does NOT contain content (that's in yaml/scenes/*.yaml).
+#   - It does NOT drive the runtime directly (that's dispatcher_story.json).
+#
+# USED BY
+#   python manage.py validate_yaml
+#     Loads this profile, builds valid_channels and valid_kinds sets,
+#     and checks every scene YAML against them. Exits 1 on errors.
+#
+# CORE vs GAME-SPECIFIC beat kinds
+#   core: true   -> defined in Layer 1 (narrative.schema.yaml)
+#                   valid in any narrative engine, no game import needed
+#   core: false  -> Dispatcher-specific, compiled by export_dispatcher_json
+#                   only meaningful in the Dispatcher engine
+#
+# NEW GAME CHECKLIST
+#   1. Copy to schemas/profiles/<your-game>.profile.yaml
+#   2. Set profile_id, display_name
+#   3. Replace channels and beat_kinds with your values
+#   4. Adjust validations to match your content rules
+#   5. python manage.py validate_yaml --profile schemas/profiles/<your-game>.profile.yaml
+# =============================================================================
+
+profile_id: dispatcher
+version: "1.0"
+display_name: Dispatcher Centro de Comunicaciones
+description: Profile for the Dispatcher narrative game engine (kabu studio).
+
+# Field alias: Dispatcher uses 'case' as the context_ref field name.
+# This alias is applied during validation so existing YAMLs don't need to change.
+context_ref_alias: case
+
+# ---------------------------------------------------------------------------
+# Channels
+# id must match scene.channel values used in YAML files.
+# ---------------------------------------------------------------------------
+channels:
+  - id: ""
+    label: Sin canal especial
+    ui_chrome: default
+    description: Default UI, no special chrome.
+  - id: narration
+    label: Narracion
+    ui_chrome: narration
+    description: Full-screen narration text, no chat interface.
+  - id: "911"
+    label: Canal 911
+    ui_chrome: emergency
+    description: Emergency dispatch console interface.
+  - id: whatsapp
+    label: WhatsApp
+    ui_chrome: chat
+    description: Mobile WhatsApp chat interface.
+
+# ---------------------------------------------------------------------------
+# Beat kinds
+# kind must match beat.kind values used in YAML files.
+# core: true  = defined in base/narrative.schema.yaml, valid in any game
+# core: false = Dispatcher-specific, handled by Dispatcher's compile step
+# ---------------------------------------------------------------------------
+beat_kinds:
+  - kind: ""
+    label: Dialogo
+    core: true
+    required_fields:
+      - speaker
+      - text
+    optional_fields:
+      - mediaType
+      - url
+      - caption
+      - name
+      - dur
+
+  - kind: narration
+    label: Narracion
+    core: true
+    required_fields:
+      - text
+
+  - kind: vignette
+    label: Vineta cinematica
+    core: true
+    required_fields: []
+    optional_fields:
+      - action
+      - scene
+      - text
+
+  - kind: input
+    label: Campo de entrada del jugador
+    core: true
+    required_fields:
+      - field
+    optional_fields:
+      - setValue
+      - answer
+      - hint
+      - errorMsg
+
+  - kind: sfx
+    label: Efecto de sonido
+    core: true
+    required_fields: []
+    optional_fields:
+      - sfx
+      - sfxAction
+
+  - kind: ambient
+    label: Audio ambiente
+    core: true
+    required_fields: []
+    optional_fields:
+      - ambient
+      - stop
+
+  - kind: wa
+    label: Mensaje WhatsApp
+    core: false
+    description: Dispatcher-specific WhatsApp messaging beat.
+    required_fields:
+      - contact
+      - text
+    optional_fields:
+      - speaker
+      - mediaType
+      - url
+      - caption
+      - name
+      - dur
+
+  - kind: tool-search
+    label: Busqueda en herramienta
+    core: false
+    description: Dispatcher-specific manual/tool lookup interaction.
+    required_fields:
+      - tool
+
+  - kind: dispatch
+    label: Despacho de unidades
+    core: false
+    description: Dispatcher-specific unit dispatch trigger.
+    required_fields: []
+
+# ---------------------------------------------------------------------------
+# Cross-scene validation rules
+# Applied by: python manage.py validate_yaml
+# ---------------------------------------------------------------------------
+validations:
+  - rule: goto_exists
+    level: error
+    description: choice_option.goto must reference an existing scene_id.
+  - rule: next_exists
+    level: error
+    description: scene.next must reference an existing scene_id or be empty.
+  - rule: input_requires_case
+    level: warning
+    description: Scenes with input beats should have a case association.
+  - rule: dispatch_requires_case
+    level: error
+    description: Scenes with dispatch beats must have a case association.
+  - rule: choice_has_options
+    level: warning
+    description: Choices should have at least one option defined.
+  - rule: no_orphan_scenes
+    level: warning
+    description: All scenes should be reachable from the project start_scene.
+
+# ---------------------------------------------------------------------------
+# Runtime panels
+# For documentation and future panel-configuration features.
+# ---------------------------------------------------------------------------
+panels:
+  - id: canal_911
+    key: C
+    label: Canal 911
+    description: Incoming 911 call interface.
+  - id: manual
+    key: M
+    label: Manual
+    description: Dispatcher operations manual for lookup.
+  - id: mapa
+    key: P
+    label: Mapa
+    description: Incident location map.
+  - id: despacho
+    key: D
+    label: Despacho
+    description: Unit dispatch interface.
+  - id: whatsapp
+    key: W
+    label: WhatsApp
+    description: WhatsApp messaging panel.

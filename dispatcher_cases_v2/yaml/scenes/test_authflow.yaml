@@ -1,0 +1,14 @@
+# scene: test_authflow — Test Flujo Autoral
+# Edit freely. Import back with: python manage.py import_yaml --scene test_authflow
+
+scene_id: test_authflow
+title: Test Flujo Autoral
+channel: narration
+objective: Escena temporal para probar el flujo completo
+beats:
+  - kind: narration
+    text: Eric mira el reloj. Las 3 AM.
+  - speaker: ERIC
+    text: Silencio absoluto en la sala.
+  - kind: narration
+    text: Una llamada entrante rompe el silencio.

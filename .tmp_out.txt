@@ -1,0 +1,36 @@
+=== Scene: bienvenida ===
+  beat 0: kind=input      action=         speaker=         text=
+  beat 1: kind=vignette   action=open     speaker=         text=Cae la lluvia, luego pasos y una respiración acelerada.
+  beat 2: kind=sfx        action=         speaker=         text=
+  beat 3: kind=vignette   action=open     speaker=         text=Un joven de unos veinte años corre por la calle esquivando p
+  beat 4: kind=ambient    action=         speaker=         text=
+  beat 5: kind=line       action=         speaker=ERIC     text=Permiso. Perdón. Permiso.
+  beat 6: kind=sfx        action=stop     speaker=         text=
+  beat 7: kind=vignette   action=open     speaker=         text=Eric tiene un morral colgándole del hombro. En un momento se
+  beat 8: kind=vignette   action=open     speaker=         text=Las recoje mientras mira los edificios.
+  beat 9: kind=vignette   action=open     speaker=         text=Mirando su teléfono se detiene frente a un edificio casi apa
+=== Scene: intro ===
+  beat 0: kind=ambient    action=         speaker=         text=
+  beat 1: kind=vignette   action=open     speaker=         text=Eric entra a la oficina iluminada y ve varios cubículos. De 
+  beat 2: kind=line       action=         speaker=ERIC     text=Eh...
+  beat 3: kind=narration  action=         speaker=         text=El hombre lo mira y lo apunta.
+  beat 4: kind=line       action=         speaker=HOMBRE   text=¿Eric?
+  beat 5: kind=narration  action=         speaker=         text=Eric asiente. El hombre mira un reloj en la pared que dice q
+  beat 6: kind=line       action=         speaker=HOMBRE   text=Primer día y llegaste tarde, po, Eric.
+  beat 7: kind=line       action=         speaker=ERIC     text=Sí, perdón, yo...
+=== Scene: supervisor ===
+  beat 0: kind=vignette   action=open     speaker=         text=Da lo mismo. Ven que me tengo que ir yo. Este va a ser tu cu
+  beat 1: kind=narration  action=         speaker=         text=Eric se sienta frente a un computador
+  beat 2: kind=vignette   action=open     speaker=         text=Perfecto, Eric, acá vas tú. Las emergencias acá y el chat ac
+  beat 3: kind=narration  action=         speaker=         text=Eric asiente.
+  beat 4: kind=narration  action=         speaker=         text=El hombre saca unas hojas anilladas y las pone sobre la mesa
+  beat 5: kind=line       action=         speaker=HOMBRE   text=Okey, esta cuestión es simple. Te llega algo, buscas la cate
+  beat 6: kind=line       action=         speaker=ERIC     text=Pero...
+  beat 7: kind=line       action=         speaker=HOMBRE   text=¿Bueno?
+  beat 8: kind=narration  action=         speaker=         text=Eric asiente.
+  beat 9: kind=line       action=         speaker=HOMBRE   text=Ya, ahora yo me voy que tenía que estar a las siete en punto
+  beat 10: kind=narration  action=         speaker=         text=Eric lo mira y asiente. El lo mira... y se va. Eric se asoma
+=== Scene: test_authflow ===
+  beat 0: kind=narration  action=         speaker=         text=Eric mira el reloj. Las 3 AM.
+  beat 1: kind=line       action=         speaker=ERIC     text=Silencio absoluto en la sala.
+  beat 2: kind=narration  action=         speaker=         text=Una llamada entrante rompe el silencio.

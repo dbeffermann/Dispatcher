@@ -1,0 +1,27 @@
+# scene: first_alert — Primera Alerta
+# Edit freely. Import back with: python manage.py import_yaml --scene first_alert
+
+scene_id: first_alert
+title: Primera Alerta
+channel: narration
+next: call_fragment
+objective: Llega la primera llamada de emergencia. Eric se desespera.
+beats:
+  - kind: narration
+    text: Eric mira la pantalla, pero no descubre nada en movimiento ni que le llame la atención. ¿Será?
+  - kind: narration
+    text: Eric vuelve a dibujar.
+  - kind: narration
+    text: El icono de la notificación pasa de estar verde a estar rojo y suena una NOTIFICACIÓN un poco más estridente. Sí hay mensaje.
+  - kind: narration
+    text: Eric se desespera y trata de contestar el mensaje. No sabe como hacerlo. Hace clic, pero nada... ¡Clic, clic, clic, clic, clic, clic, clic!
+  - kind: sfx
+    sfx: notif
+  - kind: narration
+    text: De pronto...
+  - speaker: MENSAJE
+    text: ¿Aló?
+  - kind: narration
+    text: Es una voz femenina. Hay algo en el mensaje; en el tono o la forma en que está escrito, que asusta a Eric.
+  - kind: sfx
+    sfx: mensaje_cortado

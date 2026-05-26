@@ -85,6 +85,8 @@ def _scene_to_json(scene) -> dict:
         d['next'] = next_id
     if scene.channel:
         d['channel'] = scene.channel
+    if scene.case_id:
+        d['case_id'] = scene.case.case_id
     return d
 
 

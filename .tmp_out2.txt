@@ -1,0 +1,1 @@
+beat 0 full: {"kind": "input", "field": "clavesecreta", "setValue": "clavesecreta", "answer": "clavesecreta", "hint": "Ingresa la clave secreta para continuar.", "errorMsg": "No es correcto."}

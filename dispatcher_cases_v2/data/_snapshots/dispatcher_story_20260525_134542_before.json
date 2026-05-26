@@ -301,46 +301,11 @@
               "label": "Buscar ayuda en el manual",
               "goto": "manual_search",
               "beats": []
-            },
-            {
-              "label": "Improvisar",
-              "goto": "manual_search",
-              "beats": [
-                {
-                  "kind": "narration",
-                  "text": "Eric baja el manual y toma el auricular con más confianza de la que siente."
-                },
-                {
-                  "speaker": "ERIC",
-                  "text": "Señorita, eh... ¿cómo está usted?"
-                },
-                {
-                  "speaker": "MENSAJE",
-                  "text": "¿Cómo estoy? ¡Acaban de robarme el auto! ¡Eso es cómo estoy!"
-                },
-                {
-                  "kind": "narration",
-                  "text": "Silencio incómodo. Eric suda frío."
-                },
-                {
-                  "speaker": "ERIC",
-                  "text": "Eh... ¿y el auto era suyo?"
-                },
-                {
-                  "speaker": "MENSAJE",
-                  "text": "¡¿Que si era mío?! ¡Claro que era mío! ¿Qué clase de pregunta es esa?"
-                },
-                {
-                  "kind": "narration",
-                  "text": "Eric mira alrededor. Solo hay una cosa que puede salvarlo en este momento."
-                }
-              ]
             }
           ]
         }
       ],
-      "channel": "911",
-      "case_id": "tutorial_mirna_auto_robado"
+      "channel": "911"
     },
     {
       "id": "dani_chat",
@@ -374,40 +339,18 @@
       ],
       "choices": [
         {
+          "at": 4,
+          "prompt": "Elige una opción",
+          "options": []
+        },
+        {
           "at": 5,
-          "prompt": "¿Qué le contestas?",
+          "prompt": "¿Qué vas a hacer? ¿Mentirle o decirle la verdad?",
           "options": [
             {
               "label": "Decirle la verdad",
               "goto": "pre_alert",
-              "beats": [
-                {
-                  "kind": "wa",
-                  "contact": "dani",
-                  "speaker": "ERIC",
-                  "text": "Sí, llegué tarde. No encuentro cómo funciona esto."
-                },
-                {
-                  "speaker": "DANI",
-                  "text": "Ay, Eric. Revisa el manual, todo está ahí. Suerte ❤"
-                }
-              ]
-            },
-            {
-              "label": "Mentirle",
-              "goto": "pre_alert",
-              "beats": [
-                {
-                  "kind": "wa",
-                  "contact": "dani",
-                  "speaker": "ERIC",
-                  "text": "No, llegué hace rato. Ya entendí todo."
-                },
-                {
-                  "speaker": "DANI",
-                  "text": "Ah ya... igual revisa el manual por si acaso. Beso."
-                }
-              ]
+              "beats": []
             }
           ]
         }
@@ -432,20 +375,11 @@
           "text": "En la pantalla dos iconos parpadean. CARABINEROS y SEGURIDAD CIUDADANA."
         },
         {
-          "speaker": "MENSAJE",
-          "text": "Eric, ¿qué está pasando? ¿Me van a ayudar o no?"
-        },
-        {
-          "speaker": "ERIC",
-          "text": "Señora, un momento. Voy a coordinar las unidades ahora."
-        },
-        {
           "kind": "dispatch"
         }
       ],
       "next": "outro",
-      "channel": "911",
-      "case_id": "tutorial_mirna_auto_robado"
+      "channel": "911"
     },
     {
       "id": "first_alert",
@@ -579,128 +513,21 @@
           "answer": "rossie",
           "hint": "Anotá el nombre del local que mencionó la llamante",
           "errorMsg": "❌ Ese no es el local. Escuchá bien: Mirna dijo que fue a un local en Tobalaba."
-        },
-        {
-          "kind": "tool-search",
-          "tool": "address"
-        },
-        {
-          "kind": "narration",
-          "text": "El mapa ubica el local en Av. Tobalaba 947, Providencia."
-        },
-        {
-          "speaker": "ERIC",
-          "text": "Señora, ¿recuerda la patente del vehículo?"
-        },
-        {
-          "speaker": "MENSAJE",
-          "text": "Sí, mi amor, TVBA-20. Como el año que terminé el colegio pero al revés."
-        },
-        {
-          "kind": "input",
-          "field": "plate",
-          "setValue": "TVBA-20",
-          "answer": "tvba",
-          "hint": "Registra la patente que te dio la llamante.",
-          "errorMsg": "❌ Esa no es la patente. Mirna dijo TVBA-20."
-        },
-        {
-          "speaker": "ERIC",
-          "text": "¿Podría describir la marca y el modelo del vehículo?"
-        },
-        {
-          "speaker": "MENSAJE",
-          "text": "Es un BMW... el modelo no sé... es uno de esos guatones. Dime qué modelos conoces."
-        },
-        {
-          "kind": "narration",
-          "text": "El manual indica: SI EL USUARIO DESCONOCE EL MODELO, SOLICITE DETALLES."
-        },
-        {
-          "kind": "tool-search",
-          "tool": "vehicle"
-        },
-        {
-          "speaker": "ERIC",
-          "text": "Señora, ¿es un SUV?"
-        },
-        {
-          "speaker": "MENSAJE",
-          "text": "Esos, Eric... X algo..."
-        },
-        {
-          "speaker": "ERIC",
-          "text": "Señora, ¿recuerda el precio aproximado del vehículo?"
-        },
-        {
-          "speaker": "MENSAJE",
-          "text": "Fue el más barato de los tres. De los tres maridos, digo."
-        },
-        {
-          "speaker": "ERIC",
-          "text": "¿Sería el modelo X1?"
-        },
-        {
-          "speaker": "MENSAJE",
-          "text": "Suena correcto, sí."
-        },
-        {
-          "speaker": "ERIC",
-          "text": "Señora, ¿y el color del vehículo?"
-        },
-        {
-          "speaker": "MENSAJE",
-          "text": "Blanco, Eric. Y es señorita."
-        },
-        {
-          "kind": "input",
-          "field": "color",
-          "setValue": "BMW X1 blanco",
-          "answer": "blanco",
-          "hint": "Registra el color del vehículo.",
-          "errorMsg": "❌ Ese no es el color. Mirna dijo blanco."
-        },
-        {
-          "speaker": "ERIC",
-          "text": "Señora, ya tengo toda la información. Voy a proceder a enviar unidades."
-        },
-        {
-          "speaker": "MENSAJE",
-          "text": "Por fin, Eric. Por favor apúrate que ya llevo media hora en la calle."
         }
       ],
       "choices": [
         {
-          "at": 8,
+          "at": 9,
           "prompt": "¿Qué vas a hacer? ¿Responderle o seguir con el protocolo?",
           "options": [
             {
               "label": "Responderle",
-              "beats": [
-                {
-                  "speaker": "ERIC",
-                  "text": "Señora, ¿está todo bien usted?"
-                },
-                {
-                  "speaker": "MENSAJE",
-                  "text": "Acabo de concretar mi tercer divorcio, Eric. Es señorita de nuevo, ¿ya? Y mi nombre es Mirna."
-                },
-                {
-                  "speaker": "ERIC",
-                  "text": "Muy bien... señorita Mirna."
-                }
-              ]
-            },
-            {
-              "label": "Seguir con el protocolo",
               "beats": []
             }
           ]
         }
       ],
-      "next": "dispatch_choice",
-      "channel": "911",
-      "case_id": "tutorial_mirna_auto_robado"
+      "channel": "911"
     },
     {
       "id": "manual_search",
@@ -716,7 +543,7 @@
         },
         {
           "speaker": "MENSAJE",
-          "text": "¿A quién acabo de llamar? ¡A la asociación de giles unidos!"
+          "text": "¿¡Eric!?"
         },
         {
           "kind": "narration",
@@ -724,7 +551,7 @@
         },
         {
           "speaker": "MENSAJE",
-          "text": "¿Qué, po, cabro? ¿Te pillé viendo porno o algo?"
+          "text": "Eric, ¿por casualidad me tocó justo hablar con el representante de toda esta cuestión de la inclusión laboral?"
         },
         {
           "kind": "narration",
@@ -732,7 +559,7 @@
         },
         {
           "speaker": "MENSAJE",
-          "text": "¡¿Lo que estoy tratando de entender es si tení un retraso m--?!"
+          "text": "Eric, ¡¿lo que estoy tratando de entender es si tení un retraso m--?!"
         },
         {
           "kind": "narration",
@@ -741,14 +568,6 @@
         {
           "speaker": "ERIC",
           "text": "¡Aquí!"
-        },
-        {
-          "speaker": "ERIC",
-          "text": "Hola. Este es el Centro de Coordinación de Emergencias. Mi nombre es Eric. ¿Cuál es la naturaleza de su emergencia?"
-        },
-        {
-          "speaker": "MENSAJE",
-          "text": "¡Mi emergencia, Eric, es que me hiciste perder cinco minutos en esta llamada!"
         }
       ],
       "choices": [
@@ -759,19 +578,6 @@
             {
               "label": "Buscar la sección",
               "beats": []
-            },
-            {
-              "label": "Decirle que se calme",
-              "beats": [
-                {
-                  "speaker": "ERIC",
-                  "text": "Señora, por favor, un momento de calma."
-                },
-                {
-                  "speaker": "MENSAJE",
-                  "text": "¡¿Calma?! ¡Acaban de robarme el auto!"
-                }
-              ]
             }
           ]
         },
@@ -782,19 +588,6 @@
             {
               "label": "Seguir buscando",
               "beats": []
-            },
-            {
-              "label": "Decirle que baje el volumen",
-              "beats": [
-                {
-                  "speaker": "ERIC",
-                  "text": "Señora... ¿podría bajar un poco el volumen?"
-                },
-                {
-                  "speaker": "MENSAJE",
-                  "text": "¡El volumen! ¡Me están hablando del volumen a mí!"
-                }
-              ]
             }
           ]
         },
@@ -805,19 +598,6 @@
             {
               "label": "Seguir buscando",
               "beats": []
-            },
-            {
-              "label": "Preguntarle cuánto tomó",
-              "beats": [
-                {
-                  "speaker": "ERIC",
-                  "text": "Señora, ¿usted... tomó algo esa noche?"
-                },
-                {
-                  "speaker": "MENSAJE",
-                  "text": "¡¿Qué?! ¡Una champaña! ¡Eso no tiene nada que ver!"
-                }
-              ]
             }
           ]
         },
@@ -828,26 +608,12 @@
             {
               "label": "Seguir buscando",
               "beats": []
-            },
-            {
-              "label": "Cortarla",
-              "beats": [
-                {
-                  "speaker": "ERIC",
-                  "text": "Señora, yo..."
-                },
-                {
-                  "kind": "narration",
-                  "text": "Eric no llega a terminar la frase. Algo lo detiene."
-                }
-              ]
             }
           ]
         }
       ],
       "next": "investigation",
-      "channel": "911",
-      "case_id": "tutorial_mirna_auto_robado"
+      "channel": "911"
     },
     {
       "id": "outro",
@@ -965,26 +731,6 @@
         }
       ],
       "next": "dani_chat",
-      "channel": "narration"
-    },
-    {
-      "id": "test_authflow",
-      "title": "Test Flujo Autoral",
-      "objective": "Escena temporal para probar el flujo completo",
-      "beats": [
-        {
-          "kind": "narration",
-          "text": "Eric mira el reloj. Las 3 AM."
-        },
-        {
-          "speaker": "ERIC",
-          "text": "Silencio absoluto en la sala."
-        },
-        {
-          "kind": "narration",
-          "text": "Una llamada entrante rompe el silencio."
-        }
-      ],
       "channel": "narration"
     }
   ],

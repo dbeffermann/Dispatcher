@@ -1,0 +1,27 @@
+# scene: intro — Escena 1: Eric llega a la oficina
+# Edit freely. Import back with: python manage.py import_yaml --scene intro
+
+scene_id: intro
+title: "Escena 1: Eric llega a la oficina"
+channel: narration
+next: supervisor
+objective: Establecer el contexto de Eric llegando a su primer día de trabajo
+beats:
+  - kind: ambient
+    ambient: office
+  - kind: vignette
+    action: open
+    scene: eric_llega_puerta_oficina
+    text: Eric entra a la oficina iluminada y ve varios cubículos. De pronto ve a un HOMBRE pasar. Sin entrar...
+  - speaker: ERIC
+    text: Eh...
+  - kind: narration
+    text: El hombre lo mira y lo apunta.
+  - speaker: HOMBRE
+    text: ¿Eric?
+  - kind: narration
+    text: Eric asiente. El hombre mira un reloj en la pared que dice que son las 21:11.
+  - speaker: HOMBRE
+    text: Primer día y llegaste tarde, po, Eric.
+  - speaker: ERIC
+    text: Sí, perdón, yo...

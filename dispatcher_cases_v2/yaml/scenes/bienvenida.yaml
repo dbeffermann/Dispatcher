@@ -1,0 +1,43 @@
+# scene: bienvenida — Haz click en Continuar
+# Edit freely. Import back with: python manage.py import_yaml --scene bienvenida
+
+scene_id: bienvenida
+title: Haz click en Continuar
+channel: narration
+next: intro
+objective: Bienvenida y clavesecreta
+beats:
+  - kind: input
+    field: clavesecreta
+    setValue: clavesecreta
+    answer: clavesecreta
+    hint: Ingresa la clave secreta para continuar.
+    errorMsg: No es correcto.
+  - kind: vignette
+    action: open
+    scene: negro
+    text: Cae la lluvia, luego pasos y una respiración acelerada.
+  - kind: sfx
+    sfx: running
+  - kind: vignette
+    action: open
+    scene: eric_corre_1
+    text: Un joven de unos veinte años corre por la calle esquivando peatones. El es ERIC.
+  - kind: ambient
+    ambient: city
+  - speaker: ERIC
+    text: Permiso. Perdón. Permiso.
+  - kind: sfx
+    sfxAction: stop
+  - kind: vignette
+    action: open
+    scene: eric_morral
+    text: Eric tiene un morral colgándole del hombro. En un momento se le engancha con un poste, se le raja y se le caen algunas cosas.
+  - kind: vignette
+    action: open
+    scene: eric_recoge_morral
+    text: Las recoje mientras mira los edificios.
+  - kind: vignette
+    action: open
+    scene: eric_llega_una_luz_prendida
+    text: Mirando su teléfono se detiene frente a un edificio casi apagado. Solo una luz está encendida. Corre.

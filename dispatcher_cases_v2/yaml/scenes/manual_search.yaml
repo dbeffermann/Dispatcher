@@ -1,0 +1,72 @@
+# scene: manual_search — Buscando la Sección
+# Edit freely. Import back with: python manage.py import_yaml --scene manual_search
+
+scene_id: manual_search
+title: Buscando la Sección
+channel: 911
+next: investigation
+case: tutorial_mirna_auto_robado
+beats:
+  - kind: narration
+    text: Eric empieza a buscar en el manual la sección correcta...
+  - kind: narration
+    text: Eric pasa las páginas...
+  - speaker: MENSAJE
+    text: ¿A quién acabo de llamar? ¡A la asociación de giles unidos!
+  - kind: narration
+    text: Eric sigue buscando, sin detenerse.
+  - speaker: MENSAJE
+    text: ¿Qué, po, cabro? ¿Te pillé viendo porno o algo?
+  - kind: narration
+    text: Eric pasa más páginas, decidido.
+  - speaker: MENSAJE
+    text: ¡¿Lo que estoy tratando de entender es si tení un retraso m--?!
+  - kind: narration
+    text: ¡Eric encuentra la página! VEHÍCULO ROBADO.
+  - speaker: ERIC
+    text: ¡Aquí!
+  - speaker: ERIC
+    text: Hola. Este es el Centro de Coordinación de Emergencias. Mi nombre es Eric. ¿Cuál es la naturaleza de su emergencia?
+  - speaker: MENSAJE
+    text: ¡Mi emergencia, Eric, es que me hiciste perder cinco minutos en esta llamada!
+choices:
+  - at: 1
+    prompt: ¿Buscar la sección de auto robado o decirle que se calme?
+    options:
+      - label: Buscar la sección
+      - label: Decirle que se calme
+        beats:
+          - speaker: ERIC
+            text: Señora, por favor, un momento de calma.
+          - speaker: MENSAJE
+            text: ¡¿Calma?! ¡Acaban de robarme el auto!
+  - at: 3
+    prompt: ¿Seguir buscando o decirle que baje el volumen?
+    options:
+      - label: Seguir buscando
+      - label: Decirle que baje el volumen
+        beats:
+          - speaker: ERIC
+            text: Señora... ¿podría bajar un poco el volumen?
+          - speaker: MENSAJE
+            text: ¡El volumen! ¡Me están hablando del volumen a mí!
+  - at: 5
+    prompt: ¿Seguir buscando o preguntarle cuánto tomó esa noche?
+    options:
+      - label: Seguir buscando
+      - label: Preguntarle cuánto tomó
+        beats:
+          - speaker: ERIC
+            text: Señora, ¿usted... tomó algo esa noche?
+          - speaker: MENSAJE
+            text: ¡¿Qué?! ¡Una champaña! ¡Eso no tiene nada que ver!
+  - at: 7
+    prompt: ¿Seguir buscando o cortarle tratándola de vieja rota?
+    options:
+      - label: Seguir buscando
+      - label: Cortarla
+        beats:
+          - speaker: ERIC
+            text: Señora, yo...
+          - kind: narration
+            text: Eric no llega a terminar la frase. Algo lo detiene.

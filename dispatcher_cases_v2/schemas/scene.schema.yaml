@@ -1,0 +1,344 @@
+# =============================================================================
+# NARRATIVE SCENE SCHEMA — v1.1
+# =============================================================================
+# Canonical YAML format for a single narrative scene.
+# Contract between: Studio DB, yaml/ versioning layer, and the compile step.
+#
+# Data flow:
+#   Studio DB  ──export_yaml──▶  scenes/*.yaml  ──compile──▶  game.json
+#   Studio DB  ◀──import_yaml──  scenes/*.yaml
+#   (game.json is always a compiled artifact; never hand-edited)
+#
+# =============================================================================
+# MULTI-GAME AGNOSTICISM — what is generic vs. game-specific
+# =============================================================================
+#
+# GENERIC (applies to any narrative game built on this Studio):
+#   - scene_id, title, next, objective     — scene identity & navigation
+#   - beats[]                              — ordered narrative units
+#   - choices[]                            — decision / branch points
+#   - kind: '' (dialogue), narration       — universal narrative kinds
+#   - kind: vignette, sfx, ambient         — universal media kinds
+#   - kind: input                          — data-entry beat (generic)
+#   - speaker, text, mediaType, url        — universal content fields
+#
+# GAME-SPECIFIC (specific to Dispatcher; may not apply to other games):
+#   - channel: '911' | 'whatsapp'          — Dispatcher channel types
+#   - kind: 'wa'                           — WhatsApp messaging mechanic
+#   - kind: 'tool-search'                  — manual lookup mechanic
+#   - kind: 'dispatch'                     — unit dispatch mechanic
+#   - beat.contact                         — Dispatcher WA contact system
+#   - scene.case                           — Dispatcher case association
+#
+# HOW TO ADD A NEW GAME:
+#   1. 'channel' is a free string — define your own values (e.g. 'radio', 'chat')
+#   2. 'kind' enum is extensible — add new kinds via extraData or fork this schema
+#   3. Use beat.extraData for game-specific fields not covered by core kinds
+#   4. Copy this file to schemas/<your-game>/scene.schema.yaml and adjust $id
+#
+# =============================================================================
+
+$schema: "https://json-schema.org/draft/2020-12/schema"
+$id: "narrative/scene.schema.yaml"
+title: Scene
+type: object
+
+required: [scene_id, title]
+
+properties:
+
+  # ---------------------------------------------------------------------------
+  # Scene identity & navigation
+  # ---------------------------------------------------------------------------
+  scene_id:
+    type: string
+    description: "Unique slug (lowercase, underscores). E.g. 'intro', 'dispatch_choice'."
+    pattern: "^[a-z0-9_]+$"
+
+  title:
+    type: string
+    description: "Human-readable scene name shown in the Studio."
+
+  channel:
+    type: string
+    default: ""
+    description: |
+      Narrative channel that determines UI chrome in-game.
+      Free string — each game defines its own values.
+      Dispatcher uses: '' (default), 'narration', '911', 'whatsapp'.
+      Other games can use: 'radio', 'chat', 'terminal', etc.
+
+  next:
+    type: string
+    description: "scene_id to go to when this scene ends (if no choices control flow)."
+
+  objective:
+    type: string
+    description: "Internal author note — not shown in-game."
+
+  case:
+    type: string
+    description: |
+      case_id of the associated Case record (e.g. 'dispatcher_case_1').
+      GAME-SPECIFIC: Dispatcher uses 'case' for its case management system.
+      Other games may ignore this field or use it for their own grouping concept.
+
+  # ---------------------------------------------------------------------------
+  # Beats (the narrative sequence)
+  # ---------------------------------------------------------------------------
+  beats:
+    type: array
+    description: "Ordered list of narrative beats. Order is determined by array position."
+    items:
+      $ref: "#/$defs/beat"
+
+  # ---------------------------------------------------------------------------
+  # Choices (branch points inserted after a beat)
+  # ---------------------------------------------------------------------------
+  choices:
+    type: array
+    description: "Decision points. Each appears after the beat at index 'at'."
+    items:
+      $ref: "#/$defs/choice"
+
+# =============================================================================
+# $defs — shared type definitions
+# =============================================================================
+$defs:
+
+  # ---------------------------------------------------------------------------
+  # Beat — a single narrative unit within a scene or choice option
+  # ---------------------------------------------------------------------------
+  beat:
+    type: object
+    description: "A single step in a narrative sequence."
+    required: []               # kind is optional (absent = dialogue)
+
+    properties:
+
+      kind:
+        type: string
+        default: ""
+        description: |
+          Beat type. Absent or '' = dialogue (speaker + text).
+          Each kind activates a different set of fields below.
+
+          GENERIC kinds (all games):
+            ''           → dialogue: speaker + text (+ optional media)
+            narration    → narrator text, no speaker
+            vignette     → cinematic shot (action + scene key)
+            input        → player data-entry field
+            sfx          → sound effect trigger
+            ambient      → background music/atmosphere
+
+          GAME-SPECIFIC kinds (Dispatcher only):
+            wa           → WhatsApp message beat
+            tool-search  → manual lookup interaction
+            dispatch     → unit dispatch trigger
+
+          EXTENSIBILITY: use extraData for fields not covered by the above kinds,
+          or define a new kind in your game-specific schema extension.
+
+        # NOTE: enum is intentionally omitted here to allow extensibility.
+        # Dispatcher valid values: '', narration, vignette, input,
+        #   tool-search, wa, sfx, ambient, dispatch
+
+      # -- Dialogue & WA fields --
+      speaker:
+        type: string
+        description: "Speaker name. Required for dialogue beats. Optional for WA beats."
+
+      text:
+        type: string
+        description: "Dialogue text, narration text, or WA message body."
+
+      # -- Vignette fields --
+      action:
+        type: string
+        enum: ["", "open", "text", "change", "close"]
+        default: ""
+        description: |
+          Cinematic action:
+            open   → open full-screen shot (image persists)
+            text   → update on-screen text while image persists
+            change → swap image
+            close  → close vignette, return to game UI
+            ''     → legacy: auto-close after timer
+
+      scene:
+        type: string
+        description: "Vignette asset key (e.g. 'office'). Used for action=open/change."
+
+      # -- Input fields --
+      field:
+        type: string
+        description: "CaseField ID that this beat fills (e.g. 'plate', 'local')."
+
+      setValue:
+        type: string
+        description: "Pre-filled value for the input field."
+
+      answer:
+        type: string
+        description: "Accepted answer string (for validation)."
+
+      hint:
+        type: string
+        description: "Hint shown to the player when input is focused."
+
+      errorMsg:
+        type: string
+        description: "Custom error message when answer does not match."
+
+      # -- Tool-search fields --
+      tool:
+        type: string
+        description: "ToolSearch ID (e.g. 'buscar_placa')."
+
+      # -- WA-specific fields --
+      contact:
+        type: string
+        description: "WA contact key (e.g. 'dani'). Defaults to project wa_default_contact."
+
+      mediaType:
+        type: string
+        enum: ["", "image", "voice", "file"]
+        description: "Media attachment type for WA and dialogue beats."
+
+      url:
+        type: string
+        description: "Relative path to media asset."
+
+      caption:
+        type: string
+        description: "Caption shown below image/file media."
+
+      name:
+        type: string
+        description: "Display filename for file attachments."
+
+      dur:
+        type: string
+        description: "Voice note duration string (e.g. '0:12')."
+
+      # -- SFX fields --
+      sfx:
+        type: string
+        description: "SFX asset key (e.g. 'notif', 'ambulance'). Required unless action=stop."
+
+      sfxAction:
+        type: string
+        enum: ["play", "replace", "stop"]
+        default: "play"
+        description: |
+          play    → layer on top of any active SFX
+          replace → stop all active SFX, then play this one
+          stop    → stop all active SFX (sfx key not needed)
+
+      # -- Ambient fields --
+      ambient:
+        type: string
+        description: "Ambient/music track key (e.g. 'rain', 'office_hum')."
+
+      stop:
+        type: boolean
+        default: false
+        description: "If true, stops ambient audio. Omit 'ambient' key when using stop."
+
+      # -- Extension point --
+      extraData:
+        type: object
+        description: |
+          Arbitrary key-value pairs for game-specific beat fields not covered
+          by the core schema. The compile step passes these through unchanged.
+          Use this to extend beats for a new game without modifying the schema.
+        additionalProperties: true
+
+    # Per-kind field requirements (documented; enforced by import_yaml validator)
+    examples:
+      - {speaker: "ERIC", text: "Necesito la dirección exacta."}
+      - {kind: "narration", text: "De pronto, el mensaje se corta."}
+      - {kind: "vignette", action: "open", scene: "office"}
+      - {kind: "vignette", action: "text", text: "Tres horas después..."}
+      - {kind: "vignette", action: "close"}
+      - {kind: "input", field: "plate", hint: "Ingresa la patente del vehículo."}
+      - {kind: "tool-search", tool: "buscar_placa"}
+      - {kind: "wa", contact: "dani", text: "¿Cuál es la dirección exacta?"}
+      - {kind: "sfx", sfx: "notif"}
+      - {kind: "sfx", sfxAction: "stop"}
+      - {kind: "ambient", ambient: "office_hum"}
+      - {kind: "ambient", stop: true}
+      - {kind: "dispatch"}
+
+  # ---------------------------------------------------------------------------
+  # Choice — a decision point
+  # ---------------------------------------------------------------------------
+  choice:
+    type: object
+    required: [at, prompt, options]
+
+    properties:
+      at:
+        type: integer
+        minimum: 0
+        description: "Insert this choice after beat index 'at' (0 = before any beats)."
+
+      prompt:
+        type: string
+        description: "Question shown to the player above the option buttons."
+
+      options:
+        type: array
+        minItems: 1
+        maxItems: 10
+        items:
+          $ref: "#/$defs/choice_option"
+
+  # ---------------------------------------------------------------------------
+  # ChoiceOption — one selectable branch
+  # ---------------------------------------------------------------------------
+  choice_option:
+    type: object
+    required: [label]
+
+    properties:
+      label:
+        type: string
+        description: "Button text shown to the player."
+
+      goto:
+        type: string
+        description: "scene_id to jump to after this option's beats play."
+
+      beats:
+        type: array
+        description: "Optional beats that play before jumping to 'goto'."
+        items:
+          $ref: "#/$defs/beat"
+
+# =============================================================================
+# Full example scene
+# =============================================================================
+examples:
+  - scene_id: dispatch_choice
+    title: Momento del despacho
+    channel: narration
+    next: outro
+    objective: "El operador confirma y despacha la unidad."
+    case: dispatcher_case_1
+    beats:
+      - kind: narration
+        text: "La operadora cierra los ojos un momento."
+      - speaker: MIRNA
+        text: "Señora, voy a necesitar que se mantenga en línea."
+      - kind: dispatch
+    choices:
+      - at: 3
+        prompt: "¿Qué unidad despachás?"
+        options:
+          - label: "Unidad más cercana"
+            goto: outro
+          - label: "Unidad especializada"
+            goto: outro
+          - label: "Solicitar apoyo primero"
+            goto: investigation

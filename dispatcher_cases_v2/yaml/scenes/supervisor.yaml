@@ -1,0 +1,35 @@
+# scene: supervisor — Primera Instrucción
+# Edit freely. Import back with: python manage.py import_yaml --scene supervisor
+
+scene_id: supervisor
+title: Primera Instrucción
+channel: narration
+next: dani_chat
+objective: "El hombre le explica el trabajo: busca categoría en el manual y haz lo que dice"
+beats:
+  - kind: vignette
+    action: open
+    scene: office
+    text: Da lo mismo. Ven que me tengo que ir yo. Este va a ser tu cubículo.
+  - kind: narration
+    text: Eric se sienta frente a un computador
+  - kind: vignette
+    action: open
+    scene: eric_supervisor_computador
+    text: Perfecto, Eric, acá vas tú. Las emergencias acá y el chat acá y... ¿esta es tu primera vez como dispatcher?
+  - kind: narration
+    text: Eric asiente.
+  - kind: narration
+    text: El hombre saca unas hojas anilladas y las pone sobre la mesa. Es un manual para Dispatcher.
+  - speaker: HOMBRE
+    text: Okey, esta cuestión es simple. Te llega algo, buscas la categoría y haces lo que dice el manual. Así de simple, ¿bueno?
+  - speaker: ERIC
+    text: Pero...
+  - speaker: HOMBRE
+    text: ¿Bueno?
+  - kind: narration
+    text: Eric asiente.
+  - speaker: HOMBRE
+    text: Ya, ahora yo me voy que tenía que estar a las siete en punto pasando a buscar a mi mujer para llevarla al cine. Si quieres agua, ahí hay agua, pero nunca... nunca... te muevas de tu estación. Nunca.
+  - kind: narration
+    text: Eric lo mira y asiente. El lo mira... y se va. Eric se asoma para mirar alrededor. Al parecer ha quedado completamente solo en la oficina.

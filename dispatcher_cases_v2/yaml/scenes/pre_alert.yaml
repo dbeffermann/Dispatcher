@@ -1,0 +1,18 @@
+# scene: pre_alert — Espera
+# Edit freely. Import back with: python manage.py import_yaml --scene pre_alert
+
+scene_id: pre_alert
+title: Espera
+channel: narration
+objective: Eric espera mientras la notificación llega. Elige entre leer o dibujar.
+beats:
+  - kind: narration
+    text: escribiendo... Eric espera... La Dani deja de escribir sin enviar el mensaje.
+  - kind: narration
+    text: Eric mira el teléfono, desilusionado. Lo deja a un lado. Mira la pantalla; aún no ha llegado nada. Mira alrededor. Mira el auricular viejo de telecomunicaciones, mira el manual. Piensa...
+choices:
+  - at: 2
+    prompt: ¿Qué vas a hacer? ¿Leer el manual o ponerte a dibujar?
+    options:
+      - label: Ponerte a dibujar
+        goto: first_alert

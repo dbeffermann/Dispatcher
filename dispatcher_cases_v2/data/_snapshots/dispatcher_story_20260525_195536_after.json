@@ -437,7 +437,11 @@
         },
         {
           "speaker": "ERIC",
-          "text": "Señora, un momento. Voy a coordinar las unidades ahora."
+          "text": "Sí, señora. En este momento envío unidades. Carabineros y Seguridad Ciudadana van en camino."
+        },
+        {
+          "speaker": "MENSAJE",
+          "text": "Okey. Gracias, Eric. Espero que lleguen rápido. Hace frío."
         },
         {
           "kind": "dispatch"
@@ -606,15 +610,19 @@
         },
         {
           "speaker": "ERIC",
-          "text": "¿Podría describir la marca y el modelo del vehículo?"
+          "text": "¿Puede describir el vehículo? ¿Marca, modelo y color?"
         },
         {
           "speaker": "MENSAJE",
-          "text": "Es un BMW... el modelo no sé... es uno de esos guatones. Dime qué modelos conoces."
+          "text": "Es un BMW X1, blanco. Recién lavado, de hecho, lo que hace todo esto todavía más doloroso."
         },
         {
-          "kind": "narration",
-          "text": "El manual indica: SI EL USUARIO DESCONOCE EL MODELO, SOLICITE DETALLES."
+          "kind": "input",
+          "field": "vehicle",
+          "setValue": "BMW X1 blanco",
+          "answer": "bmw",
+          "hint": "Registra el vehículo descrito por la llamante.",
+          "errorMsg": "❌ Ese no es el vehículo. Mirna dijo BMW X1, blanco."
         },
         {
           "kind": "tool-search",
@@ -622,47 +630,7 @@
         },
         {
           "speaker": "ERIC",
-          "text": "Señora, ¿es un SUV?"
-        },
-        {
-          "speaker": "MENSAJE",
-          "text": "Esos, Eric... X algo..."
-        },
-        {
-          "speaker": "ERIC",
-          "text": "Señora, ¿recuerda el precio aproximado del vehículo?"
-        },
-        {
-          "speaker": "MENSAJE",
-          "text": "Fue el más barato de los tres. De los tres maridos, digo."
-        },
-        {
-          "speaker": "ERIC",
-          "text": "¿Sería el modelo X1?"
-        },
-        {
-          "speaker": "MENSAJE",
-          "text": "Suena correcto, sí."
-        },
-        {
-          "speaker": "ERIC",
-          "text": "Señora, ¿y el color del vehículo?"
-        },
-        {
-          "speaker": "MENSAJE",
-          "text": "Blanco, Eric. Y es señorita."
-        },
-        {
-          "kind": "input",
-          "field": "color",
-          "setValue": "BMW X1 blanco",
-          "answer": "blanco",
-          "hint": "Registra el color del vehículo.",
-          "errorMsg": "❌ Ese no es el color. Mirna dijo blanco."
-        },
-        {
-          "speaker": "ERIC",
-          "text": "Señora, ya tengo toda la información. Voy a proceder a enviar unidades."
+          "text": "Señora Mirna, ya tengo toda la información. Voy a proceder a enviar unidades."
         },
         {
           "speaker": "MENSAJE",
@@ -671,7 +639,7 @@
       ],
       "choices": [
         {
-          "at": 8,
+          "at": 9,
           "prompt": "¿Qué vas a hacer? ¿Responderle o seguir con el protocolo?",
           "options": [
             {
@@ -679,15 +647,11 @@
               "beats": [
                 {
                   "speaker": "ERIC",
-                  "text": "Señora, ¿está todo bien usted?"
+                  "text": "Señora, le pido disculpas. Estamos trabajando en esto."
                 },
                 {
                   "speaker": "MENSAJE",
-                  "text": "Acabo de concretar mi tercer divorcio, Eric. Es señorita de nuevo, ¿ya? Y mi nombre es Mirna."
-                },
-                {
-                  "speaker": "ERIC",
-                  "text": "Muy bien... señorita Mirna."
+                  "text": "Okey, Eric, apúrate."
                 }
               ]
             },
@@ -716,7 +680,7 @@
         },
         {
           "speaker": "MENSAJE",
-          "text": "¿A quién acabo de llamar? ¡A la asociación de giles unidos!"
+          "text": "¿¡Eric!?"
         },
         {
           "kind": "narration",
@@ -724,7 +688,7 @@
         },
         {
           "speaker": "MENSAJE",
-          "text": "¿Qué, po, cabro? ¿Te pillé viendo porno o algo?"
+          "text": "Eric, ¿por casualidad me tocó justo hablar con el representante de toda esta cuestión de la inclusión laboral?"
         },
         {
           "kind": "narration",
@@ -732,7 +696,7 @@
         },
         {
           "speaker": "MENSAJE",
-          "text": "¡¿Lo que estoy tratando de entender es si tení un retraso m--?!"
+          "text": "Eric, ¡¿lo que estoy tratando de entender es si tení un retraso m--?!"
         },
         {
           "kind": "narration",
@@ -741,14 +705,6 @@
         {
           "speaker": "ERIC",
           "text": "¡Aquí!"
-        },
-        {
-          "speaker": "ERIC",
-          "text": "Hola. Este es el Centro de Coordinación de Emergencias. Mi nombre es Eric. ¿Cuál es la naturaleza de su emergencia?"
-        },
-        {
-          "speaker": "MENSAJE",
-          "text": "¡Mi emergencia, Eric, es que me hiciste perder cinco minutos en esta llamada!"
         }
       ],
       "choices": [
@@ -769,7 +725,7 @@
                 },
                 {
                   "speaker": "MENSAJE",
-                  "text": "¡¿Calma?! ¡Acaban de robarme el auto!"
+                  "text": "¡¿Calma?! ¡Acaban de robarme el auto, Eric!"
                 }
               ]
             }

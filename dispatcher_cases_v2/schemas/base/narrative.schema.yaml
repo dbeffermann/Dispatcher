@@ -1,0 +1,251 @@
+# =============================================================================
+# LAYER 1 — BASE NARRATIVE SCHEMA  (narrative/scene.schema.yaml  v1.0)
+# =============================================================================
+#
+# PURPOSE
+#   Universal, game-agnostic contract for every narrative scene in the Studio.
+#   Defines the structural primitives shared by ALL games:
+#     - Scene identity (scene_id, title, channel, next)
+#     - Beat sequence (ordered narrative units with extensible 'kind')
+#     - Choices and branching (at-index, options, goto)
+#
+# WHAT THIS FILE IS
+#   A reference document and human-readable specification.
+#   The Studio does not load this file at runtime — it is a contract for
+#   humans and tooling to reason about the YAML format.
+#
+# WHAT THIS FILE IS NOT
+#   - It does NOT enumerate valid 'kind' values for any specific game.
+#   - It does NOT list valid 'channel' values.
+#   - It does NOT define validation rules (e.g. input_requires_case).
+#   - It does NOT define game-specific fields (contact, tool, sfx, etc.).
+#   Those belong in Layer 2: the game profile.
+#
+# LAYER MODEL
+#   Layer 1 (this file): schemas/base/narrative.schema.yaml
+#     Generic narrative primitives. Stable across all games.
+#
+#   Layer 2: schemas/profiles/<game>.profile.yaml
+#     Game-specific config. Valid channels, beat kinds, required fields,
+#     validation rules, runtime panels. One file per game.
+#
+#   Layer 3 (runtime): data/dispatcher_story.json
+#     Compiled artifact. Never edit by hand.
+#
+# MULTI-GAME USAGE
+#   To add a new game:
+#     1. Keep this file unchanged.
+#     2. Create schemas/profiles/<your-game>.profile.yaml.
+#     3. python manage.py validate_yaml --profile schemas/profiles/<your-game>.profile.yaml
+# =============================================================================
+
+$schema: "https://json-schema.org/draft/2020-12/schema"
+$id: "narrative/scene.schema.yaml"
+title: NarrativeScene
+type: object
+
+required: [scene_id, title]
+
+properties:
+
+  # ---------------------------------------------------------------------------
+  # Scene identity & navigation
+  # ---------------------------------------------------------------------------
+
+  scene_id:
+    type: string
+    pattern: "^[a-z0-9_]+$"
+    description: "Unique slug. E.g. 'intro', 'dispatch_choice'."
+
+  title:
+    type: string
+    description: "Human-readable name shown in the Studio."
+
+  channel:
+    type: string
+    default: ""
+    description: |
+      Narrative channel. Valid values are defined by the game profile.
+      The profile enumerates valid channel IDs and their UI chrome.
+
+  next:
+    type: string
+    description: "scene_id to navigate to when this scene ends (no choices controlling flow)."
+
+  objective:
+    type: string
+    description: "Author note — not shown in-game."
+
+  # Game-specific context association (e.g. a 'case', 'mission', 'chapter').
+  # Profiles define what this field means and whether it is required.
+  context_ref:
+    type: string
+    description: |
+      Reference to a game-specific context record (e.g. case_id, mission_id).
+      Named 'case' in the Dispatcher profile for backwards compatibility.
+
+  # ---------------------------------------------------------------------------
+  # Beats (narrative sequence)
+  # ---------------------------------------------------------------------------
+
+  beats:
+    type: array
+    description: "Ordered narrative units. Order is determined by array position."
+    items:
+      $ref: "#/$defs/beat"
+
+  # ---------------------------------------------------------------------------
+  # Choices (branch points)
+  # ---------------------------------------------------------------------------
+
+  choices:
+    type: array
+    description: "Decision points inserted after a given beat index."
+    items:
+      $ref: "#/$defs/choice"
+
+# =============================================================================
+# $defs — shared type definitions
+# =============================================================================
+$defs:
+
+  # ---------------------------------------------------------------------------
+  # Beat — a single narrative unit
+  # ---------------------------------------------------------------------------
+  beat:
+    type: object
+    description: "A single step in the narrative sequence."
+
+    properties:
+
+      kind:
+        type: string
+        default: ""
+        description: |
+          Beat type. Valid values are defined by the game profile's beat_kinds list.
+          The profile specifies which kinds are CORE (generic) and which are
+          GAME-SPECIFIC, along with required and optional fields for each kind.
+
+          CORE kinds (all games — defined here for reference):
+            ''          -> dialogue: speaker + text
+            narration   -> narrator text (no speaker)
+            vignette    -> cinematic shot
+            input       -> player data-entry
+            sfx         -> sound effect
+            ambient     -> background audio
+
+          Game-specific kinds are declared in the game profile.
+
+      # Universal content fields
+      speaker:
+        type: string
+        description: "Speaker identifier. Required for dialogue ('') beats."
+
+      text:
+        type: string
+        description: "Dialogue, narration, or message body text."
+
+      # Vignette fields (kind: vignette)
+      action:
+        type: string
+        description: "Cinematic action: open, text, change, close, or ''."
+
+      scene:
+        type: string
+        description: "Vignette asset key (cinematic image identifier)."
+
+      # Input fields (kind: input)
+      field:
+        type: string
+        description: "Context field ID that this beat fills."
+
+      setValue:
+        type: string
+
+      answer:
+        type: string
+
+      hint:
+        type: string
+
+      errorMsg:
+        type: string
+
+      # Audio fields (kind: sfx / ambient)
+      sfx:
+        type: string
+
+      sfxAction:
+        type: string
+        description: "play | replace | stop"
+
+      ambient:
+        type: string
+
+      stop:
+        type: boolean
+
+      # Media fields (dialogue, wa)
+      mediaType:
+        type: string
+
+      url:
+        type: string
+
+      caption:
+        type: string
+
+      name:
+        type: string
+
+      dur:
+        type: string
+
+      # Extension point — game-specific fields not covered above
+      extraData:
+        type: object
+        additionalProperties: true
+        description: |
+          Arbitrary game-specific key-value pairs.
+          Passed through unchanged by the compiler.
+          Prefer explicit fields in beat_kinds; use extraData only for
+          truly ad-hoc extensions that don't warrant a profile entry.
+
+  # ---------------------------------------------------------------------------
+  # Choice
+  # ---------------------------------------------------------------------------
+  choice:
+    type: object
+    required: [at, prompt, options]
+    properties:
+      at:
+        type: integer
+        minimum: 0
+        description: "Insert this choice after beat at index 'at'."
+      prompt:
+        type: string
+        description: "Question shown to the player."
+      options:
+        type: array
+        minItems: 0
+        items:
+          $ref: "#/$defs/choice_option"
+
+  # ---------------------------------------------------------------------------
+  # ChoiceOption
+  # ---------------------------------------------------------------------------
+  choice_option:
+    type: object
+    required: [label]
+    properties:
+      label:
+        type: string
+        description: "Button text shown to the player."
+      goto:
+        type: string
+        description: "scene_id to jump to after this option's beats play."
+      beats:
+        type: array
+        description: "Beats that play before jumping to 'goto'."
+        items:
+          $ref: "#/$defs/beat"

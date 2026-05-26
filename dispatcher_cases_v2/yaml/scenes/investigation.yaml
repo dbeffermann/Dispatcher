@@ -1,0 +1,93 @@
+# scene: investigation — Investigación - Llamada con Mirna
+# Edit freely. Import back with: python manage.py import_yaml --scene investigation
+
+scene_id: investigation
+title: Investigación - Llamada con Mirna
+channel: 911
+next: dispatch_choice
+objective: Eric sigue el manual para recopilar datos sobre el vehículo robado. Paso a paso.
+case: tutorial_mirna_auto_robado
+beats:
+  - speaker: ERIC
+    text: Señora, para continuar voy a necesitar que mantenga la calma
+  - speaker: ERIC
+    text: Señora, ¿cuál fue la última ubicación confirmada del vehículo?
+  - speaker: MENSAJE
+    text: Uf, por fin vamos pa' adelante, Eric, oh. Mira, vine a comer con una amiga a Providencia. Entré, me comí una ensalada, me tomé una champaña, salí y mi auto ya no estaba donde lo había estacionado
+  - speaker: ERIC
+    text: Señora, ¿podría darme la dirección exacta en la que se encuentra?
+  - speaker: MENSAJE
+    text: Eric, mi amor, quiero que sepas que no tengo las puta idea de la dirección exacta en la que me encuentro. No soy de acá y si la supiera ya te la hubiese--
+  - kind: narration
+    text: Eric interrumpe.
+  - speaker: ERIC
+    text: Señora, ¿y podría decirme el nombre del local si es posible?
+  - speaker: MENSAJE
+    text: Sí, Eric, eso sí puedo hacerlo. Es el ROSSIE LA LOCA de Providencia. ¿Y Eric...?
+  - kind: input
+    field: local
+    setValue: Rossie La Loca
+    answer: rossie
+    hint: Anotá el nombre del local que mencionó la llamante
+    errorMsg: "❌ Ese no es el local. Escuchá bien: Mirna dijo que fue a un local en Tobalaba."
+  - kind: tool-search
+    tool: address
+  - kind: narration
+    text: El mapa ubica el local en Av. Tobalaba 947, Providencia.
+  - speaker: ERIC
+    text: Señora, ¿recuerda la patente del vehículo?
+  - speaker: MENSAJE
+    text: Sí, mi amor, TVBA-20. Como el año que terminé el colegio pero al revés.
+  - kind: input
+    field: plate
+    setValue: TVBA-20
+    answer: tvba
+    hint: Registra la patente que te dio la llamante.
+    errorMsg: ❌ Esa no es la patente. Mirna dijo TVBA-20.
+  - speaker: ERIC
+    text: ¿Podría describir la marca y el modelo del vehículo?
+  - speaker: MENSAJE
+    text: Es un BMW... el modelo no sé... es uno de esos guatones. Dime qué modelos conoces.
+  - kind: narration
+    text: "El manual indica: SI EL USUARIO DESCONOCE EL MODELO, SOLICITE DETALLES."
+  - kind: tool-search
+    tool: vehicle
+  - speaker: ERIC
+    text: Señora, ¿es un SUV?
+  - speaker: MENSAJE
+    text: Esos, Eric... X algo...
+  - speaker: ERIC
+    text: Señora, ¿recuerda el precio aproximado del vehículo?
+  - speaker: MENSAJE
+    text: Fue el más barato de los tres. De los tres maridos, digo.
+  - speaker: ERIC
+    text: ¿Sería el modelo X1?
+  - speaker: MENSAJE
+    text: Suena correcto, sí.
+  - speaker: ERIC
+    text: Señora, ¿y el color del vehículo?
+  - speaker: MENSAJE
+    text: Blanco, Eric. Y es señorita.
+  - kind: input
+    field: color
+    setValue: BMW X1 blanco
+    answer: blanco
+    hint: Registra el color del vehículo.
+    errorMsg: ❌ Ese no es el color. Mirna dijo blanco.
+  - speaker: ERIC
+    text: Señora, ya tengo toda la información. Voy a proceder a enviar unidades.
+  - speaker: MENSAJE
+    text: Por fin, Eric. Por favor apúrate que ya llevo media hora en la calle.
+choices:
+  - at: 8
+    prompt: ¿Qué vas a hacer? ¿Responderle o seguir con el protocolo?
+    options:
+      - label: Responderle
+        beats:
+          - speaker: ERIC
+            text: Señora, ¿está todo bien usted?
+          - speaker: MENSAJE
+            text: Acabo de concretar mi tercer divorcio, Eric. Es señorita de nuevo, ¿ya? Y mi nombre es Mirna.
+          - speaker: ERIC
+            text: Muy bien... señorita Mirna.
+      - label: Seguir con el protocolo

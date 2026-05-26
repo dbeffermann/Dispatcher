@@ -1,0 +1,21 @@
+# scene: dispatch_choice — Despacho de Unidades
+# Edit freely. Import back with: python manage.py import_yaml --scene dispatch_choice
+
+scene_id: dispatch_choice
+title: Despacho de Unidades
+channel: 911
+next: outro
+objective: Eric elige las unidades a despachar según el manual
+case: tutorial_mirna_auto_robado
+beats:
+  - kind: sfx
+    sfx: notif
+  - kind: ambient
+    ambient: rain
+  - kind: narration
+    text: En la pantalla dos iconos parpadean. CARABINEROS y SEGURIDAD CIUDADANA.
+  - speaker: MENSAJE
+    text: Eric, ¿qué está pasando? ¿Me van a ayudar o no?
+  - speaker: ERIC
+    text: Señora, un momento. Voy a coordinar las unidades ahora.
+  - kind: dispatch

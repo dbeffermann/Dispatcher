@@ -111,3 +111,46 @@ Debe terminar con:
 ## Compatibilidad
 
 El runtime todavía soporta `case_fields`, `tool_search` y `dispatch_rules` globales como fallback legacy, pero el camino recomendado es usar `cases[]`.
+
+## Testing
+
+### Requisitos
+
+```bash
+pip install playwright
+python -m playwright install chromium   # o usar Edge / Chrome del sistema
+```
+
+### Correr la suite completa (pre-release gate)
+
+```bash
+# Desde dispatcher_cases_v2/
+python scripts/run_tests.py
+```
+
+Ejecuta en orden:
+1. `validate_story.py` — validación de esquema y grafo de historia
+2. `test_input_regression.py` — 13 tests de paridad click / Enter / Space (deterministas, usan helpers internos para setup)
+3. `test_e2e_player.py` — 8 tests E2E desde la perspectiva del jugador (sin manipulación interna)
+
+Retorna exit code `0` solo si todos los suites pasan.
+
+### Correr un suite individual
+
+```bash
+python scripts/test_input_regression.py          # headless
+python scripts/test_input_regression.py --headed # muestra la ventana del browser
+
+python scripts/test_e2e_player.py
+python scripts/test_e2e_player.py --headed
+```
+
+### Cuándo correr
+
+- Antes de cualquier release
+- Después de cambiar lógica de input, avance de beats o viñetas
+- Después de editar `dispatcher_console.html` en las secciones `triggerPrimaryAction`, `handleBlockedContinue`, `advance`, `vgnContinue` o `refreshControls`
+
+### Documentación de testing
+
+Ver [`scripts/TESTING.md`](scripts/TESTING.md) para arquitectura detallada, notas de timing y guía de mantenimiento.

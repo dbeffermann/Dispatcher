@@ -1,0 +1,40 @@
+
+E2E Player Tests — dispatcher_console.html
+======================================================
+File : file:///C:/Users/dbeff/Downloads/dispatcher_cases_v2/dispatcher_cases_v2/dispatcher_console.html
+Tests: 8
+Note : Each test opens a fresh browser page (no shared state).
+
+  FAIL E2E — INICIAR shows password prompt: #inp-answer not visible after INICIAR.
+Expected: game enters the first beat (password input) on its own.
+  FAIL E2E — password + Enter opens vignette: unexpected error: Page.fill: Timeout 30000ms exceeded.
+Call log:
+  - waiting for locator("#inp-answer")
+
+  FAIL E2E — click closes vignette (player UX): unexpected error: Page.fill: Timeout 30000ms exceeded.
+Call log:
+  - waiting for locator("#inp-answer")
+
+  FAIL E2E — Enter closes vignette (parity): unexpected error: Page.fill: Timeout 30000ms exceeded.
+Call log:
+  - waiting for locator("#inp-answer")
+
+  FAIL E2E — Space closes vignette (parity): unexpected error: Page.fill: Timeout 30000ms exceeded.
+Call log:
+  - waiting for locator("#inp-answer")
+
+  FAIL E2E — click advances narration beat: unexpected error: Page.fill: Timeout 30000ms exceeded.
+Call log:
+  - waiting for locator("#inp-answer")
+
+  FAIL E2E — Enter advances narration beat: unexpected error: Page.fill: Timeout 30000ms exceeded.
+Call log:
+  - waiting for locator("#inp-answer")
+
+  FAIL E2E — Space advances narration beat: unexpected error: Page.fill: Timeout 30000ms exceeded.
+Call log:
+  - waiting for locator("#inp-answer")
+
+
+======================================================
+PASSED 0/8    FAILED 8/8

@@ -1,0 +1,50 @@
+# scene: call_fragment — Fragmento de Llamada
+# Edit freely. Import back with: python manage.py import_yaml --scene call_fragment
+
+scene_id: call_fragment
+title: Fragmento de Llamada
+channel: 911
+objective: Primeros intentos de comunicación. Eric debe decidir si buscar ayuda en el manual o improvisar.
+case: tutorial_mirna_auto_robado
+beats:
+  - speaker: ERIC
+    text: Eh... ¿Aló?
+  - speaker: MENSAJE
+    text: Aló, necesito--
+  - kind: narration
+    text: De pronto, el mensaje se corta.
+  - kind: narration
+    text: Eric mira la pantalla desesperado tratando de encontrar el mensaje. Nada.
+  - speaker: ERIC
+    text: ¿Aló, aló, aló? ¿Señorita...?
+  - kind: narration
+    text: De pronto, otro mensaje aparece en la pantalla. Ahora sí, Eric responde enseguida...
+  - speaker: MENSAJE
+    text: ¡Aló, por favor, necesito ayuda!
+  - kind: narration
+    text: Eric, con la urgencia, no lo nota, pero esta, aunque es una voz femenina, evidentemente no es la misma voz de antes.
+  - speaker: ERIC
+    text: Eh...
+choices:
+  - at: 8
+    prompt: ¿Qué vas a hacer? ¿Buscar ayuda en el manual o improvisar?
+    options:
+      - label: Buscar ayuda en el manual
+        goto: manual_search
+      - label: Improvisar
+        goto: manual_search
+        beats:
+          - kind: narration
+            text: Eric baja el manual y toma el auricular con más confianza de la que siente.
+          - speaker: ERIC
+            text: Señorita, eh... ¿cómo está usted?
+          - speaker: MENSAJE
+            text: ¿Cómo estoy? ¡Acaban de robarme el auto! ¡Eso es cómo estoy!
+          - kind: narration
+            text: Silencio incómodo. Eric suda frío.
+          - speaker: ERIC
+            text: Eh... ¿y el auto era suyo?
+          - speaker: MENSAJE
+            text: ¡¿Que si era mío?! ¡Claro que era mío! ¿Qué clase de pregunta es esa?
+          - kind: narration
+            text: Eric mira alrededor. Solo hay una cosa que puede salvarlo en este momento.

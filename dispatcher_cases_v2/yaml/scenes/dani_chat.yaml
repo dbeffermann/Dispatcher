@@ -1,0 +1,44 @@
+# scene: dani_chat — Mensaje de Dani
+# Edit freely. Import back with: python manage.py import_yaml --scene dani_chat
+
+scene_id: dani_chat
+title: Mensaje de Dani
+channel: whatsapp
+objective: Eric contacta a su amiga/novia Dani. Ella lo orienta sobre el manual.
+beats:
+  - kind: narration
+    text: Eric mira la pantalla del computador. Fijo. No pasa nada. No entra ningún mensaje. No sabe qué hacer. [TEST STORY MAP E2E]
+  - kind: vignette
+    action: open
+    scene: mensaje_dani
+    text: "Eric toma su teléfono y busca un contacto: DANI. Abre el chat y escribe: 'Llegué'."
+  - kind: wa
+    contact: dani
+    text: Llegué
+    speaker: ERIC
+  - kind: narration
+    text: Espera. De pronto... escribiendo...
+  - speaker: DANI
+    text: ¿Recién?
+choices:
+  - at: 5
+    prompt: ¿Qué le contestas?
+    options:
+      - label: Decirle la verdad
+        goto: pre_alert
+        beats:
+          - kind: wa
+            contact: dani
+            text: Sí, llegué tarde. No encuentro cómo funciona esto.
+            speaker: ERIC
+          - speaker: DANI
+            text: Ay, Eric. Revisa el manual, todo está ahí. Suerte ❤
+      - label: Mentirle
+        goto: pre_alert
+        beats:
+          - kind: wa
+            contact: dani
+            text: No, llegué hace rato. Ya entendí todo.
+            speaker: ERIC
+          - speaker: DANI
+            text: Ah ya... igual revisa el manual por si acaso. Beso.

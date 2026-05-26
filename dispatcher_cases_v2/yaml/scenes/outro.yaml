@@ -1,0 +1,20 @@
+# scene: outro — Incidente Completado
+# Edit freely. Import back with: python manage.py import_yaml --scene outro
+
+scene_id: outro
+title: Incidente Completado
+channel: narration
+objective: "Cierre: Eric termina la llamada y reflexiona sobre su primer incidente."
+beats:
+  - kind: vignette
+    scene: closure
+  - speaker: ""
+    text: ""
+  - kind: narration
+    text: INCIDENTE COMPLETADO. VEHÍCULO ROBADO — EN PROCESO. REVISAR PANEL DESPACHO.
+  - kind: narration
+    text: Eric corta... espera... cuando ya no escucha nada y no hay otro mensaje se echa para atrás y...
+  - speaker: ERIC
+    text: Uf...
+  - kind: narration
+    text: Son las 10:45.

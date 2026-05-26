@@ -194,8 +194,8 @@ html, body {
    RIGHT PANEL — inspector
    ============================================================ */
 #studio-right {
-  width: 380px;
-  min-width: 380px;
+  width: 480px;
+  min-width: 360px;
   display: flex;
   flex-direction: column;
   background: #07101d;
@@ -699,22 +699,61 @@ html, body {
   text-overflow: ellipsis;
 }
 .se-choice-body {
-  padding: 8px 10px;
-  display: grid;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
   gap: 8px;
 }
 .se-choice-grid {
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 6px;
-  align-items: center;
+  align-items: start;
 }
+/* Option rows: label on row 1 (full-width), goto+save+delete on row 2 */
 .se-choice-option-row {
   display: grid;
-  grid-template-columns: 1fr 180px auto auto;
-  gap: 6px;
+  grid-template-columns: 1fr auto auto;
+  gap: 4px 6px;
   align-items: center;
 }
+.se-choice-option-row > :nth-child(1) { grid-column: 1 / -1; }
+/* Option card wrapper */
+.se-opt-wrap {
+  border: 1px solid #1b2e54;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #08121f;
+}
+.se-opt-wrap-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  background: #0c1324;
+  border-bottom: 1px solid #1b2e54;
+}
+.se-opt-letter {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: #a78bfa;
+}
+.se-opt-wrap .se-choice-option-row {
+  padding: 6px 8px;
+}
+/* Add-new-option row */
+.se-choice-new-opt-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 6px;
+  align-items: center;
+  border-top: 1px dashed #1b2e54;
+  padding-top: 6px;
+}
+.se-choice-new-opt-row > :nth-child(1) { grid-column: 1 / -1; }
+/* child 2 = select (1fr), child 3 = button (auto) — same row */
 
 .se-beat-card[draggable="true"],
 .se-choice-card[draggable="true"] {
@@ -1527,19 +1566,25 @@ function renderChoiceSequenceCard(sid, scene, ch) {
       <input class="se-input" id="seq-choice-prompt-${ch.id}" type="text" value="${escHtml(ch.prompt || '')}" placeholder="Pregunta de la decision">
       <button class="se-btn se-btn-save" type="button" onclick="saveChoicePromptInSequence('${escHtml(sid)}', ${ch.id})">Guardar</button>
     </div>
-    ${options.map(opt => `
-      <div class="se-choice-option-row">
-        <input class="se-input" id="seq-opt-label-${opt.id}" type="text" value="${escHtml(opt.label || '')}" placeholder="Texto opcion">
-        <select class="se-input se-select" id="seq-opt-goto-${opt.id}">${sceneOptionsHtml(opt.goto_scene_id || opt.goto || '')}</select>
-        <button class="se-btn se-btn-save" type="button" onclick="saveChoiceOptionInSequence('${escHtml(sid)}', ${ch.id}, ${opt.id})">Guardar</button>
-        <button class="se-btn se-btn-danger" type="button" onclick="deleteChoiceOptionInSequence('${escHtml(sid)}', ${ch.id}, ${opt.id})">Eliminar</button>
-      </div>
-    `).join('')}
-    <div class="se-choice-option-row">
-      <input class="se-input" id="seq-new-opt-label-${ch.id}" type="text" value="" placeholder="Nueva opcion">
+    ${options.map((opt, i) => {
+      const letter = 'ABCDEFGHIJ'[i] ?? String(i + 1);
+      return `<div class="se-opt-wrap">
+        <div class="se-opt-wrap-head">
+          <span class="se-opt-letter">Opci&#xF3;n ${letter}</span>
+          <button class="se-icon-btn se-icon-delete" type="button" title="Eliminar opci&#xF3;n ${letter}"
+                  onclick="deleteChoiceOptionInSequence('${escHtml(sid)}', ${ch.id}, ${opt.id})">&#x2715;</button>
+        </div>
+        <div class="se-choice-option-row">
+          <input class="se-input" id="seq-opt-label-${opt.id}" type="text" value="${escHtml(opt.label || '')}" placeholder="Texto de la opci&#xF3;n ${letter}">
+          <select class="se-input se-select" id="seq-opt-goto-${opt.id}">${sceneOptionsHtml(opt.goto_scene_id || opt.goto || '')}</select>
+          <button class="se-btn se-btn-save" type="button" onclick="saveChoiceOptionInSequence('${escHtml(sid)}', ${ch.id}, ${opt.id})">Guardar</button>
+        </div>
+      </div>`;
+    }).join('')}
+    <div class="se-choice-new-opt-row">
+      <input class="se-input" id="seq-new-opt-label-${ch.id}" type="text" value="" placeholder="Nueva opci&#xF3;n&#x2026;">
       <select class="se-input se-select" id="seq-new-opt-goto-${ch.id}">${sceneOptionsHtml('')}</select>
-      <button class="se-btn se-btn-secondary" type="button" onclick="createChoiceOptionInSequence('${escHtml(sid)}', ${ch.id})">+ Opcion</button>
-      <span></span>
+      <button class="se-btn se-btn-secondary" type="button" onclick="createChoiceOptionInSequence('${escHtml(sid)}', ${ch.id})">+ Opci&#xF3;n</button>
     </div>
   </div>
 </div>`;

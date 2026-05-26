@@ -1,34 +1,88 @@
-# Dispatcher Authoring — Django Admin
+# Studio de Autoría — Django
 
-Backend de autoría para editar el contenido del juego y exportar los JSON que consume `dispatcher_console.html`.
+Herramienta principal de creación de contenido narrativo para juegos
+basados en el runtime Dispatcher. El Studio es la única fuente de verdad
+para el contenido del juego; todos los demás artefactos se derivan de él.
 
-## Estructura
+---
+
+## Arquitectura: tres capas, una fuente de verdad
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     STUDIO  (fuente de verdad)                  │
+│   Django + SQLite · interfaz visual de nodos · panel de edición │
+│                                                                  │
+│  Modelos: GameProject, Scene, Beat, Choice, ChoiceOption, ...    │
+└──────────────┬──────────────────────────────┬───────────────────┘
+               │  export_yaml                  │  export_dispatcher_json
+               ▼                               ▼
+┌──────────────────────────┐   ┌─────────────────────────────────┐
+│  CAPA YAML  (versioning) │   │  game.json  (artefacto runtime) │
+│  yaml/scenes/*.yaml      │   │  data/dispatcher_story.json     │
+│  yaml/project.yaml       │   │  data/dispatcher_assets.json    │
+│                          │   │                                 │
+│  • Git / control versión │   │  NUNCA se edita a mano.         │
+│  • Edición humana avanzada│  │  Siempre se regenera desde DB.  │
+│  • Integración con IA    │   └─────────────────────────────────┘
+│  • Backup legible        │
+└──────────────┬───────────┘
+               │  import_yaml
+               └─────────────────────────────▶ Studio DB
+```
+
+### Principios de la arquitectura
+
+| Capa | Rol | ¿Se edita a mano? |
+|------|-----|-------------------|
+| **Studio (DB)** | Fuente de verdad. Toda creación y edición ocurre aquí. | Solo vía UI del Studio |
+| **YAML** | Capa de serialización. Sirve para versionar, editar en bulk, revisar con IA, y restaurar. | Sí — pero siempre se re-importa al Studio |
+| **game.json** | Artefacto compilado consumido por el runtime. | **Nunca** |
+
+> El Studio no es un wrapper sobre el JSON. El JSON es un artefacto que **siempre se regenera** desde el Studio.
+
+---
+
+## Estructura del proyecto
 
 ```
 authoring/
   manage.py
+  validate_roundtrip.py       ← valida que el roundtrip es lossless
   requirements.txt
-  authoring_project/       ← configuración Django
+  authoring_project/          ← configuración Django
     settings.py
     urls.py
-  dispatcher_authoring/    ← app principal
-    models.py              ← todos los modelos
-    admin.py               ← Django Admin con inlines
+  dispatcher_authoring/
+    models.py                 ← modelos genéricos (multi-juego)
+    admin.py
     management/commands/
-      import_dispatcher_json.py
-      export_dispatcher_json.py
+      import_dispatcher_json.py   ← bootstrap inicial desde JSON legado
+      export_dispatcher_json.py   ← COMPILAR: DB → game.json
       validate_dispatcher_project.py
-  db.sqlite3               ← base de datos local (generada)
+      export_yaml.py              ← DB → yaml/scenes/*.yaml
+      import_yaml.py              ← yaml/scenes/*.yaml → DB  (con backup)
+  db.sqlite3                  ← base de datos local
+  db_backups/                 ← backups automáticos (creados por import_yaml)
 ```
 
-Los archivos de juego NO se tocan:
+Artefactos generados (en `../dispatcher_cases_v2/`):
 ```
-../dispatcher_cases_v2/
-  dispatcher_console.html   ← runtime del juego (sin cambios)
-  data/
-    dispatcher_story.json   ← generado por export_dispatcher_json
-    dispatcher_assets.json  ← generado por export_dispatcher_json
+data/
+  dispatcher_story.json       ← generado por export_dispatcher_json
+  dispatcher_assets.json      ← generado por export_dispatcher_json
+  _snapshots/                 ← snapshots generados por validate_roundtrip
+yaml/
+  project.yaml                ← generado por export_yaml
+  scenes/
+    bienvenida.yaml
+    intro.yaml
+    ...
+schemas/
+  scene.schema.yaml           ← contrato canónico del formato YAML
 ```
+
+---
 
 ## Setup inicial
 
@@ -79,18 +133,103 @@ Verifica:
 - Escenas de emergencia (channel=911) detectadas
 - Cada caso tiene `DispatchRule`
 
-## Flujo de trabajo
-
-```
-Abrir admin  →  editar contenido  →  export_dispatcher_json  →  abrir dispatcher_console.html
-```
-
-## Admin
+### Flujo YAML: versioning y edición avanzada
 
 ```bash
-python manage.py runserver
-# Abrir: http://127.0.0.1:8000/admin/
-# Usuario: admin / contraseña definida en createsuperuser
+# Exportar DB → archivos YAML editables
+python manage.py export_yaml
+
+# Revisar / editar yaml/scenes/*.yaml manualmente o con IA
+# Luego re-importar (crea backup automático del DB antes de escribir)
+python manage.py import_yaml
+
+# Volver a compilar game.json
+python manage.py export_dispatcher_json
+```
+
+Opciones útiles:
+```bash
+# Solo una escena
+python manage.py export_yaml --scene dispatch_choice
+python manage.py import_yaml --scene dispatch_choice
+
+# Previsualizar sin escribir
+python manage.py export_yaml --dry-run
+python manage.py import_yaml --dry-run
+```
+
+### Validar roundtrip lossless
+
+```bash
+# Ejecuta export_yaml + import_yaml + export_dispatcher_json y compara JSON antes/después
+python validate_roundtrip.py
+
+# Resultado esperado:
+# RESULT: PASS — roundtrip is lossless (0 differences)
+```
+
+### Restaurar desde backup
+
+Los backups se crean automáticamente en `authoring/db_backups/` cada vez que se ejecuta
+`import_yaml` en modo real (no dry-run):
+
+```bash
+# Listar backups disponibles
+ls db_backups/
+
+# Restaurar (reemplazar el DB actual con el backup)
+cp db_backups/20260525_132344_before_import_yaml.sqlite3 db.sqlite3
+```
+
+---
+
+## Comandos de referencia
+
+| Comando | Qué hace |
+|---------|----------|
+| `import_dispatcher_json` | Bootstrap: JSON legado → DB (idempotente) |
+| `export_dispatcher_json` | **Compilar**: DB → game.json (artefacto runtime) |
+| `export_yaml` | Serializar: DB → yaml/scenes/*.yaml |
+| `import_yaml` | Re-importar: yaml → DB (con backup automático) |
+| `validate_dispatcher_project` | Verificar integridad de FKs y referencias |
+| `python validate_roundtrip.py` | Confirmar que el roundtrip es lossless |
+
+---
+
+## Flujo de trabajo recomendado
+
+### Creación normal (día a día)
+
+```
+Studio UI  →  guardar  →  export_dispatcher_json  →  probar juego
+```
+
+### Edición en bulk / con IA
+
+```
+export_yaml  →  editar YAML  →  import_yaml  →  export_dispatcher_json
+```
+
+### Versionado
+
+```
+export_yaml  →  git add yaml/  →  git commit  →  historial legible de cambios
+```
+
+---
+
+## Studio
+
+```bash
+python manage.py runserver 8001
+# Abrir: http://127.0.0.1:8001/studio/
+```
+
+## Admin (Django Admin clásico)
+
+```bash
+python manage.py runserver 8001
+# Abrir: http://127.0.0.1:8001/admin/
 ```
 
 ### Modelos disponibles
